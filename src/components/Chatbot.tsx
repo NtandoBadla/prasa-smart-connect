@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Bot, User } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { MessageCircle, X, Send, Bot, User, Mic, MicOff } from "lucide-react";
 import { SCHEDULES, ALERTS, searchTrains, STATIONS } from "@/data/prasa";
 
 interface ChatMsg {
@@ -181,30 +181,102 @@ export function Chatbot() {
             </div>
           )}
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              send(input);
-            }}
-            className="flex items-center gap-2 border-t border-border bg-card p-3"
-          >
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about trains, delays, fares…"
-              className="flex-1 rounded-sm border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
-            />
-            <button
-              type="submit"
-              className="flex h-9 w-9 items-center justify-center rounded-sm bg-destructive text-destructive-foreground hover:opacity-90"
-              aria-label="Send"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </form>
+          <ChatInputBar input={input} setInput={setInput} onSend={send} />
         </div>
       )}
     </>
+  );
+}
+
+function ChatInputBar({
+  input,
+  setInput,
+  onSend,
+}: {
+  input: string;
+  setInput: (v: string) => void;
+  onSend: (text: string) => void;
+}) {
+  const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(false);
+  const recRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SR =
+      typeof window !== "undefined" &&
+      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    setSupported(!!SR);
+  }, []);
+
+  const toggleMic = useCallback(() => {
+    const SR =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    if (listening && recRef.current) {
+      recRef.current.stop();
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "en-ZA";
+    rec.interimResults = true;
+    rec.continuous = false;
+    let finalText = "";
+    rec.onresult = (e: any) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += t;
+        else interim += t;
+      }
+      setInput((finalText + interim).trim());
+    };
+    rec.onend = () => {
+      setListening(false);
+      if (finalText.trim()) onSend(finalText.trim());
+    };
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  }, [listening, onSend, setInput]);
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSend(input);
+      }}
+      className="flex items-center gap-2 border-t border-border bg-card p-3"
+    >
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder={listening ? "Listening…" : "Ask about trains, delays, fares…"}
+        className="flex-1 rounded-sm border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+      />
+      {supported && (
+        <button
+          type="button"
+          onClick={toggleMic}
+          className={`flex h-9 w-9 items-center justify-center rounded-sm border transition-colors ${
+            listening
+              ? "border-destructive bg-destructive text-destructive-foreground animate-pulse"
+              : "border-border bg-background text-muted-foreground hover:bg-secondary"
+          }`}
+          aria-label={listening ? "Stop listening" : "Voice input"}
+          title={listening ? "Stop listening" : "Voice input"}
+        >
+          {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+        </button>
+      )}
+      <button
+        type="submit"
+        className="flex h-9 w-9 items-center justify-center rounded-sm bg-destructive text-destructive-foreground hover:opacity-90"
+        aria-label="Send"
+      >
+        <Send className="h-4 w-4" />
+      </button>
+    </form>
   );
 }
 
