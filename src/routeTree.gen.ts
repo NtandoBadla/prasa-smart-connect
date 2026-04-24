@@ -12,6 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrackingRouteImport } from './routes/tracking'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SavedRouteImport } from './routes/saved'
+import { Route as SafetyRouteImport } from './routes/safety'
+import { Route as PlannerRouteImport } from './routes/planner'
+import { Route as NewsRouteImport } from './routes/news'
+import { Route as MapRouteImport } from './routes/map'
+import { Route as LostFoundRouteImport } from './routes/lost-found'
+import { Route as FaresRouteImport } from './routes/fares'
+import { Route as CrowdingRouteImport } from './routes/crowding'
 import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -30,6 +37,41 @@ const SavedRoute = SavedRouteImport.update({
   path: '/saved',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SafetyRoute = SafetyRouteImport.update({
+  id: '/safety',
+  path: '/safety',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlannerRoute = PlannerRouteImport.update({
+  id: '/planner',
+  path: '/planner',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewsRoute = NewsRouteImport.update({
+  id: '/news',
+  path: '/news',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MapRoute = MapRouteImport.update({
+  id: '/map',
+  path: '/map',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LostFoundRoute = LostFoundRouteImport.update({
+  id: '/lost-found',
+  path: '/lost-found',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaresRoute = FaresRouteImport.update({
+  id: '/fares',
+  path: '/fares',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrowdingRoute = CrowdingRouteImport.update({
+  id: '/crowding',
+  path: '/crowding',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AlertsRoute = AlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
@@ -44,6 +86,13 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alerts': typeof AlertsRoute
+  '/crowding': typeof CrowdingRoute
+  '/fares': typeof FaresRoute
+  '/lost-found': typeof LostFoundRoute
+  '/map': typeof MapRoute
+  '/news': typeof NewsRoute
+  '/planner': typeof PlannerRoute
+  '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/tracking': typeof TrackingRoute
@@ -51,6 +100,13 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alerts': typeof AlertsRoute
+  '/crowding': typeof CrowdingRoute
+  '/fares': typeof FaresRoute
+  '/lost-found': typeof LostFoundRoute
+  '/map': typeof MapRoute
+  '/news': typeof NewsRoute
+  '/planner': typeof PlannerRoute
+  '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/tracking': typeof TrackingRoute
@@ -59,21 +115,72 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/alerts': typeof AlertsRoute
+  '/crowding': typeof CrowdingRoute
+  '/fares': typeof FaresRoute
+  '/lost-found': typeof LostFoundRoute
+  '/map': typeof MapRoute
+  '/news': typeof NewsRoute
+  '/planner': typeof PlannerRoute
+  '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/tracking': typeof TrackingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/alerts' | '/saved' | '/search' | '/tracking'
+  fullPaths:
+    | '/'
+    | '/alerts'
+    | '/crowding'
+    | '/fares'
+    | '/lost-found'
+    | '/map'
+    | '/news'
+    | '/planner'
+    | '/safety'
+    | '/saved'
+    | '/search'
+    | '/tracking'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/alerts' | '/saved' | '/search' | '/tracking'
-  id: '__root__' | '/' | '/alerts' | '/saved' | '/search' | '/tracking'
+  to:
+    | '/'
+    | '/alerts'
+    | '/crowding'
+    | '/fares'
+    | '/lost-found'
+    | '/map'
+    | '/news'
+    | '/planner'
+    | '/safety'
+    | '/saved'
+    | '/search'
+    | '/tracking'
+  id:
+    | '__root__'
+    | '/'
+    | '/alerts'
+    | '/crowding'
+    | '/fares'
+    | '/lost-found'
+    | '/map'
+    | '/news'
+    | '/planner'
+    | '/safety'
+    | '/saved'
+    | '/search'
+    | '/tracking'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AlertsRoute: typeof AlertsRoute
+  CrowdingRoute: typeof CrowdingRoute
+  FaresRoute: typeof FaresRoute
+  LostFoundRoute: typeof LostFoundRoute
+  MapRoute: typeof MapRoute
+  NewsRoute: typeof NewsRoute
+  PlannerRoute: typeof PlannerRoute
+  SafetyRoute: typeof SafetyRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   TrackingRoute: typeof TrackingRoute
@@ -102,6 +209,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SavedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/safety': {
+      id: '/safety'
+      path: '/safety'
+      fullPath: '/safety'
+      preLoaderRoute: typeof SafetyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/planner': {
+      id: '/planner'
+      path: '/planner'
+      fullPath: '/planner'
+      preLoaderRoute: typeof PlannerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/news': {
+      id: '/news'
+      path: '/news'
+      fullPath: '/news'
+      preLoaderRoute: typeof NewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/map': {
+      id: '/map'
+      path: '/map'
+      fullPath: '/map'
+      preLoaderRoute: typeof MapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lost-found': {
+      id: '/lost-found'
+      path: '/lost-found'
+      fullPath: '/lost-found'
+      preLoaderRoute: typeof LostFoundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fares': {
+      id: '/fares'
+      path: '/fares'
+      fullPath: '/fares'
+      preLoaderRoute: typeof FaresRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crowding': {
+      id: '/crowding'
+      path: '/crowding'
+      fullPath: '/crowding'
+      preLoaderRoute: typeof CrowdingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/alerts': {
       id: '/alerts'
       path: '/alerts'
@@ -122,6 +278,13 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AlertsRoute: AlertsRoute,
+  CrowdingRoute: CrowdingRoute,
+  FaresRoute: FaresRoute,
+  LostFoundRoute: LostFoundRoute,
+  MapRoute: MapRoute,
+  NewsRoute: NewsRoute,
+  PlannerRoute: PlannerRoute,
+  SafetyRoute: SafetyRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   TrackingRoute: TrackingRoute,
