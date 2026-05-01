@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PRASA Train Update</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+          <!-- ── Header ── -->
+          <tr>
+            <td style="background:#1a3a5c;padding:24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <span style="display:inline-block;background:#e63946;border-radius:4px;padding:6px 10px;margin-right:12px;vertical-align:middle;">
+                      <span style="color:#ffffff;font-size:18px;font-weight:bold;">&#128646;</span>
+                    </span>
+                    <span style="color:#ffffff;font-size:20px;font-weight:bold;vertical-align:middle;">PRASA Metrorail</span>
+                  </td>
+                  <td align="right">
+                    <span style="color:rgba(255,255,255,0.7);font-size:12px;">Smart Commute Alerts</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Status banner (static orange — works for all statuses) ── -->
+          <tr>
+            <td style="background:#1a3a5c;padding:10px 32px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#e63946;border-radius:4px;padding:12px 20px;text-align:center;">
+                    <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.5px;">
+                      Service Update &mdash; {{status}}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Body ── -->
+          <tr>
+            <td style="padding:32px;">
+
+              <p style="margin:0 0 8px;color:#374151;font-size:15px;">Hi there,</p>
+              <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+                There is a service update for a train at your subscribed station.
+                Here are the full details:
+              </p>
+
+              <!-- Detail card -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+
+                      <tr>
+                        <td style="color:#6b7280;font-size:13px;width:140px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          &#128649; Station
+                        </td>
+                        <td style="color:#111827;font-size:14px;font-weight:600;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          {{station}}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td style="color:#6b7280;font-size:13px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          &#128646; Train No
+                        </td>
+                        <td style="color:#111827;font-size:14px;font-weight:600;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          #{{train_no}}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td style="color:#6b7280;font-size:13px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          &#128739; Line
+                        </td>
+                        <td style="color:#111827;font-size:14px;font-weight:600;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          {{line}}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td style="color:#6b7280;font-size:13px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          &#128203; Status
+                        </td>
+                        <td style="padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          <span style="display:inline-block;background:#e63946;color:#ffffff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.3px;">
+                            {{status}}
+                          </span>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td style="color:#6b7280;font-size:13px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          &#128172; Reason
+                        </td>
+                        <td style="color:#374151;font-size:14px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
+                          {{reason}}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td style="color:#6b7280;font-size:13px;padding:7px 0;">
+                          &#128336; Updated at
+                        </td>
+                        <td style="color:#374151;font-size:14px;padding:7px 0;">
+                          {{updated_at}}
+                        </td>
+                      </tr>
+
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Info tip -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0 6px 6px 0;margin-bottom:28px;">
+                <tr>
+                  <td style="padding:14px 18px;color:#1e40af;font-size:13px;line-height:1.7;">
+                    <strong>&#128161; Tip:</strong> If your train is cancelled or severely delayed, check the
+                    <a href="https://prasa-smart-connect.netlify.app/tracking"
+                      style="color:#1d4ed8;text-decoration:underline;">Live Trains</a> page for the
+                    next available service, or ask the
+                    <a href="https://prasa-smart-connect.netlify.app"
+                      style="color:#1d4ed8;text-decoration:underline;">PRASA Assistant</a>
+                    for alternative routes.
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA button -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="https://prasa-smart-connect.netlify.app/tracking"
+                      style="display:inline-block;background:#1a3a5c;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:13px 30px;border-radius:6px;">
+                      View Live Train Status &#8594;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- ── Footer ── -->
+          <tr>
+            <td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 32px;text-align:center;">
+              <p style="margin:0 0 6px;color:#9ca3af;font-size:12px;">
+                You are receiving this because you subscribed to train alerts at <strong>{{station}}</strong>.
+              </p>
+              <p style="margin:0;color:#9ca3af;font-size:12px;">
+                PRASA Metrorail &middot; Western Cape &middot; South Africa
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

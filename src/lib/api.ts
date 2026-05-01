@@ -1,4 +1,4 @@
-const BASE = "http://localhost:3001/api";
+const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api";
 
 function getToken() {
   return localStorage.getItem("admin_token") ?? "";
@@ -7,37 +7,123 @@ function getToken() {
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", "x-admin-token": getToken(), ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": getToken(),
+      ...init?.headers,
+    },
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body?.error ?? res.statusText);
+  }
   return res.json() as Promise<T>;
 }
 
 export const api = {
-  // Public
+  // ── Health ──────────────────────────────────────────────────────────────────
+  health: () =>
+    apiFetch<{ status: string; supabase: string; emailjs: string; serpapi: string; openai: string }>("/health"),
+
+  // ── Public ──────────────────────────────────────────────────────────────────
   schedules: () => apiFetch<import("@/data/prasa").TrainSchedule[]>("/schedules"),
   alerts: () => apiFetch<import("@/data/prasa").ServiceAlert[]>("/alerts"),
   news: () => apiFetch<import("@/data/extras").NewsItem[]>("/news"),
 
-  // Auth
+  // ── Auth ────────────────────────────────────────────────────────────────────
   login: (username: string, password: string) =>
-    apiFetch<{ token: string }>("/admin/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+    apiFetch<{ token: string }>("/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
   logout: () => apiFetch("/admin/logout", { method: "POST" }),
 
-  // Stats
+  // ── Registration & subscriptions ────────────────────────────────────────────
+  register: (email: string, station: string) =>
+    apiFetch<{ message: string; userId: string }>("/register", {
+      method: "POST",
+      body: JSON.stringify({ email, station }),
+    }),
+  subscribe: (email: string, station: string) =>
+    apiFetch<{ message: string }>("/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ email, station }),
+    }),
+  getSubscriptions: (email: string) =>
+    apiFetch<{ station: string; created_at: string }[]>(
+      `/subscribe/${encodeURIComponent(email)}`,
+    ),
+
+  // ── Chatbot ─────────────────────────────────────────────────────────────────
+  chat: (message: string) =>
+    apiFetch<{ reply: string }>("/chatbot", {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+
+  // ── Admin ───────────────────────────────────────────────────────────────────
   stats: () =>
-    apiFetch<{ totalSchedules: number; onTime: number; delayed: number; cancelled: number; totalAlerts: number; criticalAlerts: number; totalNews: number }>("/admin/stats"),
+    apiFetch<{
+      totalSchedules: number;
+      onTime: number;
+      delayed: number;
+      cancelled: number;
+      totalAlerts: number;
+      criticalAlerts: number;
+      totalNews: number;
+      totalSubscribers: number;
+    }>("/admin/stats"),
 
-  // Admin CRUD
-  createAlert: (data: object) => apiFetch("/admin/alerts", { method: "POST", body: JSON.stringify(data) }),
-  updateAlert: (id: string, data: object) => apiFetch(`/admin/alerts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  deleteAlert: (id: string) => apiFetch(`/admin/alerts/${id}`, { method: "DELETE" }),
+  subscribers: () =>
+    apiFetch<{ id: string; email: string; station: string; created_at: string }[]>(
+      "/admin/subscribers",
+    ),
 
-  createSchedule: (data: object) => apiFetch("/admin/schedules", { method: "POST", body: JSON.stringify(data) }),
-  updateSchedule: (id: string, data: object) => apiFetch(`/admin/schedules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  deleteSchedule: (id: string) => apiFetch(`/admin/schedules/${id}`, { method: "DELETE" }),
+  trainUpdate: (data: {
+    trainNo: string;
+    line: string;
+    station: string;
+    status: string;
+    delayMin?: number;
+    reason?: string;
+  }) =>
+    apiFetch<{ message: string; notified: number; failed: number }>(
+      "/admin/update",
+      { method: "POST", body: JSON.stringify(data) },
+    ),
 
-  createNews: (data: object) => apiFetch("/admin/news", { method: "POST", body: JSON.stringify(data) }),
-  updateNews: (id: string, data: object) => apiFetch(`/admin/news/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  deleteNews: (id: string) => apiFetch(`/admin/news/${id}`, { method: "DELETE" }),
+  recentUpdates: () =>
+    apiFetch<
+      {
+        id: string;
+        train_no: string;
+        line: string;
+        station: string;
+        status: string;
+        delay_min: number;
+        reason: string;
+        updated_at: string;
+      }[]
+    >("/admin/update"),
+
+  createAlert: (data: object) =>
+    apiFetch("/admin/alerts", { method: "POST", body: JSON.stringify(data) }),
+  updateAlert: (id: string, data: object) =>
+    apiFetch(`/admin/alerts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteAlert: (id: string) =>
+    apiFetch(`/admin/alerts/${id}`, { method: "DELETE" }),
+
+  createSchedule: (data: object) =>
+    apiFetch("/admin/schedules", { method: "POST", body: JSON.stringify(data) }),
+  updateSchedule: (id: string, data: object) =>
+    apiFetch(`/admin/schedules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSchedule: (id: string) =>
+    apiFetch(`/admin/schedules/${id}`, { method: "DELETE" }),
+
+  createNews: (data: object) =>
+    apiFetch("/admin/news", { method: "POST", body: JSON.stringify(data) }),
+  updateNews: (id: string, data: object) =>
+    apiFetch(`/admin/news/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteNews: (id: string) =>
+    apiFetch(`/admin/news/${id}`, { method: "DELETE" }),
 };

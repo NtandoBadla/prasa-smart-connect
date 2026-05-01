@@ -1,8 +1,9 @@
+import serverless from "serverless-http";
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { randomUUID } from "crypto";
-import { supabase } from "./db";
+import { supabase } from "../../server/db";
 
 const isSupabaseConfigured =
   !!process.env.SUPABASE_URL &&
@@ -10,15 +11,13 @@ const isSupabaseConfigured =
   !!process.env.SUPABASE_SERVICE_KEY &&
   !process.env.SUPABASE_SERVICE_KEY.includes("REPLACE");
 
-// ── Modular routes ────────────────────────────────────────────────────────────
-import registerRouter from "./routes/register";
-import subscribeRouter from "./routes/subscribe";
-import adminUpdateRouter from "./routes/adminUpdate";
-import chatbotRouter from "./routes/chatbot";
+import registerRouter from "../../server/routes/register";
+import subscribeRouter from "../../server/routes/subscribe";
+import adminUpdateRouter from "../../server/routes/adminUpdate";
+import chatbotRouter from "../../server/routes/chatbot";
 
-// ── In-memory store (schedules / alerts / news) ───────────────────────────────
-import type { TrainSchedule, ServiceAlert } from "../src/data/prasa";
-import type { NewsItem } from "../src/data/extras";
+import type { TrainSchedule, ServiceAlert } from "../../src/data/prasa";
+import type { NewsItem } from "../../src/data/extras";
 
 let schedules: TrainSchedule[] = [
   { id: "S1", trainNo: "0412", line: "Southern Line", from: "Cape Town", to: "Simon's Town", departure: "06:15", arrival: "07:32", durationMin: 77, stops: ["Cape Town","Salt River","Observatory","Claremont","Wynberg","Retreat","Muizenberg","Fish Hoek","Simon's Town"], status: "On Time", platform: "11", fare: 14.5 },
@@ -44,12 +43,8 @@ let news: NewsItem[] = [
   { id: "n4", title: "Statement on weekend Southern Line works", excerpt: "Engineering teams will be on site this weekend at Muizenberg. Bus shuttles will be deployed between Muizenberg and Fish Hoek.", category: "Press", date: "2025-04-04" },
 ];
 
-// ── App setup ─────────────────────────────────────────────────────────────────
 const app = express();
-app.use(cors({
-  origin: (origin, cb) => cb(null, true), // allow all localhost origins in dev
-  credentials: true,
-}));
+app.use(cors({ origin: "*", credentials: false }));
 app.use(express.json());
 
 // ── Session auth ──────────────────────────────────────────────────────────────
@@ -57,16 +52,13 @@ const ADMIN_USER = process.env.ADMIN_USER ?? "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS ?? "prasa2025";
 const sessions = new Set<string>();
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.headers["x-admin-token"] as string | undefined;
-  if (!token || !sessions.has(token)) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!token || !sessions.has(token)) { res.status(401).json({ error: "Unauthorized" }); return; }
   next();
 }
 
-// ── Auth routes ───────────────────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
 app.post("/api/admin/login", (req, res) => {
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: "Username and password required" }); return; }
@@ -84,22 +76,21 @@ app.post("/api/admin/logout", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Public data routes ────────────────────────────────────────────────────────
+// ── Public ────────────────────────────────────────────────────────────────────
 app.get("/api/schedules", (_req, res) => res.json(schedules));
 app.get("/api/alerts", (_req, res) => res.json(alerts));
 app.get("/api/news", (_req, res) => res.json(news));
 
-// ── New modular routes ────────────────────────────────────────────────────────
+// ── Modular routes ────────────────────────────────────────────────────────────
 app.use("/api/register", registerRouter);
 app.use("/api/subscribe", subscribeRouter);
 app.use("/api/admin/update", requireAuth, adminUpdateRouter);
 app.use("/api/chatbot", chatbotRouter);
 
-// ── Admin: Schedules CRUD ─────────────────────────────────────────────────────
+// ── Admin: Schedules ──────────────────────────────────────────────────────────
 app.post("/api/admin/schedules", requireAuth, (req, res) => {
   const item: TrainSchedule = { ...req.body, id: randomUUID() };
-  schedules.push(item);
-  res.status(201).json(item);
+  schedules.push(item); res.status(201).json(item);
 });
 app.put("/api/admin/schedules/:id", requireAuth, (req, res) => {
   const idx = schedules.findIndex((s) => s.id === req.params.id);
@@ -112,11 +103,10 @@ app.delete("/api/admin/schedules/:id", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Admin: Alerts CRUD ────────────────────────────────────────────────────────
+// ── Admin: Alerts ─────────────────────────────────────────────────────────────
 app.post("/api/admin/alerts", requireAuth, (req, res) => {
   const item: ServiceAlert = { ...req.body, id: randomUUID(), postedAt: new Date().toISOString() };
-  alerts.unshift(item);
-  res.status(201).json(item);
+  alerts.unshift(item); res.status(201).json(item);
 });
 app.put("/api/admin/alerts/:id", requireAuth, (req, res) => {
   const idx = alerts.findIndex((a) => a.id === req.params.id);
@@ -129,11 +119,10 @@ app.delete("/api/admin/alerts/:id", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Admin: News CRUD ──────────────────────────────────────────────────────────
+// ── Admin: News ───────────────────────────────────────────────────────────────
 app.post("/api/admin/news", requireAuth, (req, res) => {
   const item: NewsItem = { ...req.body, id: randomUUID() };
-  news.unshift(item);
-  res.status(201).json(item);
+  news.unshift(item); res.status(201).json(item);
 });
 app.put("/api/admin/news/:id", requireAuth, (req, res) => {
   const idx = news.findIndex((n) => n.id === req.params.id);
@@ -146,7 +135,7 @@ app.delete("/api/admin/news/:id", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Health check ──────────────────────────────────────────────────────────────
+// ── Health ────────────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -157,13 +146,10 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// ── Admin: Subscribers (read from Supabase) ───────────────────────────────────
+// ── Admin: Subscribers ────────────────────────────────────────────────────────
 app.get("/api/admin/subscribers", requireAuth, async (_req, res) => {
   if (!isSupabaseConfigured) { res.json([]); return; }
-  const { data, error } = await supabase
-    .from("users")
-    .select("id, email, station, created_at")
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("users").select("id, email, station, created_at").order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: "Failed to fetch subscribers" }); return; }
   res.json(data ?? []);
 });
@@ -187,11 +173,10 @@ app.get("/api/admin/stats", requireAuth, async (_req, res) => {
   });
 });
 
-// ── Global error handler ──────────────────────────────────────────────────────
+// ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Unhandled error:", err.message);
   res.status(500).json({ error: "Internal server error" });
 });
 
-const PORT = process.env.PORT ?? 3001;
-app.listen(PORT, () => console.log(`PRASA API running on http://localhost:${PORT}`));
+export const handler = serverless(app);

@@ -3,21 +3,27 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import type { TrainSchedule, ServiceAlert } from "@/data/prasa";
 import type { NewsItem } from "@/data/extras";
+import { STATIONS } from "@/data/prasa";
 import {
   Train, AlertTriangle, Newspaper, LayoutDashboard,
   LogOut, Plus, Pencil, Trash2, Check, X, RefreshCw,
+  Users, Send, Bell,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
 });
 
-type Tab = "overview" | "schedules" | "alerts" | "news";
+type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update";
 
 type Stats = {
   totalSchedules: number; onTime: number; delayed: number;
   cancelled: number; totalAlerts: number; criticalAlerts: number; totalNews: number;
+  totalSubscribers: number;
 };
+
+type Subscriber = { id: string; email: string; station: string; created_at: string };
+type TrainUpdateRecord = { id: string; train_no: string; line: string; station: string; status: string; delay_min: number; reason: string; updated_at: string };
 
 function useAdminGuard() {
   const navigate = useNavigate();
@@ -34,6 +40,8 @@ function AdminDashboard() {
   const [schedules, setSchedules] = useState<TrainSchedule[]>([]);
   const [alerts, setAlerts] = useState<ServiceAlert[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
+  const [updates, setUpdates] = useState<TrainUpdateRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -41,6 +49,9 @@ function AdminDashboard() {
     try {
       const [s, a, n, st] = await Promise.all([api.schedules(), api.alerts(), api.news(), api.stats()]);
       setSchedules(s); setAlerts(a); setNews(n); setStats(st);
+      // Load subscribers and updates in background — don't block if Supabase not configured
+      api.subscribers().then(setSubscribers).catch(() => {});
+      api.recentUpdates().then(setUpdates).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -69,6 +80,8 @@ function AdminDashboard() {
           <NavItem icon={<Train className="h-4 w-4" />} label="Schedules" active={tab === "schedules"} onClick={() => setTab("schedules")} />
           <NavItem icon={<AlertTriangle className="h-4 w-4" />} label="Alerts" active={tab === "alerts"} onClick={() => setTab("alerts")} />
           <NavItem icon={<Newspaper className="h-4 w-4" />} label="News" active={tab === "news"} onClick={() => setTab("news")} />
+          <NavItem icon={<Bell className="h-4 w-4" />} label="Train Update" active={tab === "update"} onClick={() => setTab("update")} />
+          <NavItem icon={<Users className="h-4 w-4" />} label="Subscribers" active={tab === "subscribers"} onClick={() => setTab("subscribers")} />
         </nav>
         <div className="border-t border-border p-3 space-y-1">
           <Link to="/" className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary">
@@ -94,6 +107,8 @@ function AdminDashboard() {
           {tab === "schedules" && <SchedulesTab schedules={schedules} onRefresh={refresh} />}
           {tab === "alerts" && <AlertsTab alerts={alerts} onRefresh={refresh} />}
           {tab === "news" && <NewsTab news={news} onRefresh={refresh} />}
+          {tab === "update" && <TrainUpdateTab updates={updates} onRefresh={refresh} />}
+          {tab === "subscribers" && <SubscribersTab subscribers={subscribers} />}
         </main>
       </div>
     </div>
@@ -110,9 +125,10 @@ function OverviewTab({ stats, schedules, alerts }: { stats: Stats; schedules: Tr
         <StatCard label="Delayed" value={stats.delayed} color="bg-warning" />
         <StatCard label="Cancelled" value={stats.cancelled} color="bg-destructive" />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Active Alerts" value={stats.totalAlerts} color="bg-primary" />
         <StatCard label="Critical Alerts" value={stats.criticalAlerts} color="bg-destructive" />
+        <StatCard label="Subscribers" value={stats.totalSubscribers} color="bg-primary" />
       </div>
 
       <div className="rounded-md border border-border bg-card">
@@ -202,7 +218,7 @@ function SchedulesTab({ schedules, onRefresh }: { schedules: TrainSchedule[]; on
         <table className="w-full text-sm">
           <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
             <tr>
-              <Th>Train</Th><Th>Line</Th><Th>Route</Th><Th>Depart</Th><Th>Arrive</Th><Th>Status</Th><Th>Fare</Th><Th></Th>
+              <Th>Train</Th><Th>Line</Th><Th>Route</Th><Th>Depart</Th><Th>Arrive</Th><Th>Status</Th><Th>Fare</Th><th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -477,4 +493,138 @@ function Th({ children }: { children: React.ReactNode }) {
 }
 function Td({ children }: { children: React.ReactNode }) {
   return <td className="px-4 py-2">{children}</td>;
+}
+
+// ── Train Update Tab ──────────────────────────────────────────────────────────
+const BLANK_UPDATE = { trainNo: "", line: "Southern Line" as const, station: "", status: "Delayed" as const, delayMin: 0, reason: "" };
+
+function TrainUpdateTab({ updates, onRefresh }: { updates: TrainUpdateRecord[]; onRefresh: () => void }) {
+  const [form, setForm] = useState({ ...BLANK_UPDATE });
+  const [result, setResult] = useState<{ message: string; notified: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true); setError(""); setResult(null);
+    try {
+      const res = await api.trainUpdate(form);
+      setResult(res);
+      setForm({ ...BLANK_UPDATE });
+      onRefresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-md border border-border bg-card p-5">
+        <h2 className="mb-4 font-semibold text-foreground">Post train status update</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Subscribers at the selected station will receive an instant email notification.</p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Train Number" value={form.trainNo} onChange={(v) => setForm((f) => ({ ...f, trainNo: v }))} />
+            <Field label="Station" value={form.station} onChange={(v) => setForm((f) => ({ ...f, station: v }))} />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Line</label>
+              <select value={form.line} onChange={(e) => setForm((f) => ({ ...f, line: e.target.value as typeof form.line }))} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground">
+                {["Southern Line","Northern Line","Central Line","Cape Flats Line"].map((l) => <option key={l}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
+              <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as typeof form.status }))} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground">
+                {["On Time","Delayed","Cancelled"].map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            {form.status === "Delayed" && (
+              <Field label="Delay (minutes)" type="number" value={String(form.delayMin)} onChange={(v) => setForm((f) => ({ ...f, delayMin: Number(v) }))} />
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Reason (optional)</label>
+            <textarea rows={2} value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. Cable theft, signal failure, track maintenance…" className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {result && (
+            <div className="rounded-sm bg-success/10 p-3 text-sm text-success">
+              {result.message} — <strong>{result.notified}</strong> subscriber(s) notified.
+            </div>
+          )}
+          <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-sm bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-60">
+            <Send className="h-4 w-4" />
+            {loading ? "Sending…" : "Post update & notify subscribers"}
+          </button>
+        </form>
+      </div>
+
+      {updates.length > 0 && (
+        <div className="rounded-md border border-border bg-card">
+          <div className="border-b border-border px-4 py-3 font-semibold text-foreground">Recent updates</div>
+          <div className="divide-y divide-border">
+            {updates.slice(0, 10).map((u) => (
+              <div key={u.id} className="flex items-start gap-3 px-4 py-3">
+                <StatusBadge status={u.status} />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Train #{u.train_no} · {u.station} · {u.line}</p>
+                  {u.reason && <p className="text-xs text-muted-foreground">{u.reason}</p>}
+                  <p className="text-xs text-muted-foreground">{new Date(u.updated_at).toLocaleString("en-ZA")}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Subscribers Tab ───────────────────────────────────────────────────────────
+function SubscribersTab({ subscribers }: { subscribers: Subscriber[] }) {
+  const [search, setSearch] = useState("");
+  const filtered = subscribers.filter(
+    (s) => s.email.toLowerCase().includes(search.toLowerCase()) || s.station.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by email or station…"
+          className="flex-1 rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        <span className="text-sm text-muted-foreground">{filtered.length} subscriber{filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {subscribers.length === 0 ? (
+        <div className="rounded-md border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          No subscribers yet. Users can register at <strong>/register</strong>.
+        </div>
+      ) : (
+        <div className="rounded-md border border-border bg-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+              <tr>
+                <Th>Email</Th><Th>Home Station</Th><Th>Registered</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => (
+                <tr key={s.id} className="border-t border-border hover:bg-secondary/30">
+                  <Td>{s.email}</Td>
+                  <Td>{s.station}</Td>
+                  <Td>{new Date(s.created_at).toLocaleDateString("en-ZA")}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircle, X, Send, Bot, User, Mic, MicOff } from "lucide-react";
 import { SCHEDULES, ALERTS, searchTrains, STATIONS } from "@/data/prasa";
+import { api } from "@/lib/api";
 
 interface ChatMsg {
   role: "user" | "assistant";
@@ -105,17 +106,21 @@ export function Chatbot() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setMessages((m) => [...m, { role: "user", content: trimmed }]);
     setInput("");
     setTyping(true);
-    setTimeout(() => {
+    try {
+      const { reply } = await api.chat(trimmed);
+      setMessages((m) => [...m, { role: "assistant", content: reply }]);
+    } catch {
       const reply = generateReply(trimmed);
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
+    } finally {
       setTyping(false);
-    }, 500 + Math.random() * 400);
+    }
   };
 
   const suggestions = ["Next train Cape Town to Simon's Town", "Any delays today?", "Fare to Bellville"];

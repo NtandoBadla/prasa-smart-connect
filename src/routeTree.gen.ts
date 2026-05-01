@@ -13,6 +13,7 @@ import { Route as TrackingRouteImport } from './routes/tracking'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SafetyRouteImport } from './routes/safety'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as PlannerRouteImport } from './routes/planner'
 import { Route as NewsRouteImport } from './routes/news'
 import { Route as MapRouteImport } from './routes/map'
@@ -43,6 +44,11 @@ const SavedRoute = SavedRouteImport.update({
 const SafetyRoute = SafetyRouteImport.update({
   id: '/safety',
   path: '/safety',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlannerRoute = PlannerRouteImport.update({
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/map': typeof MapRoute
   '/news': typeof NewsRoute
   '/planner': typeof PlannerRoute
+  '/register': typeof RegisterRoute
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/map': typeof MapRoute
   '/news': typeof NewsRoute
   '/planner': typeof PlannerRoute
+  '/register': typeof RegisterRoute
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/map': typeof MapRoute
   '/news': typeof NewsRoute
   '/planner': typeof PlannerRoute
+  '/register': typeof RegisterRoute
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/map'
     | '/news'
     | '/planner'
+    | '/register'
     | '/safety'
     | '/saved'
     | '/search'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/map'
     | '/news'
     | '/planner'
+    | '/register'
     | '/safety'
     | '/saved'
     | '/search'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/map'
     | '/news'
     | '/planner'
+    | '/register'
     | '/safety'
     | '/saved'
     | '/search'
@@ -215,6 +227,7 @@ export interface RootRouteChildren {
   MapRoute: typeof MapRoute
   NewsRoute: typeof NewsRoute
   PlannerRoute: typeof PlannerRoute
+  RegisterRoute: typeof RegisterRoute
   SafetyRoute: typeof SafetyRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
@@ -249,6 +262,13 @@ declare module '@tanstack/react-router' {
       path: '/safety'
       fullPath: '/safety'
       preLoaderRoute: typeof SafetyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/planner': {
@@ -353,6 +373,7 @@ const rootRouteChildren: RootRouteChildren = {
   MapRoute: MapRoute,
   NewsRoute: NewsRoute,
   PlannerRoute: PlannerRoute,
+  RegisterRoute: RegisterRoute,
   SafetyRoute: SafetyRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,

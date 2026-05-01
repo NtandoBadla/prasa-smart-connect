@@ -5,9 +5,14 @@
     "moduleResolution": "node",
     "esModuleInterop": true,
     "strict": true,
+    "types": ["node"],
     "outDir": "dist-server",
     "rootDir": ".",
+    "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["server/**/*", "src/data/**/*"]
+  "include": ["server/**/*", "src/data/**/*", "netlify/**/*"],
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
+  }
 }
