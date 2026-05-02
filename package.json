@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "server": "tsx watch --tsconfig tsconfig.server.json server/index.ts",
+    "test:connections": "tsx --tsconfig tsconfig.server.json scripts/test-connections.ts",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "build:netlify": "vite build",

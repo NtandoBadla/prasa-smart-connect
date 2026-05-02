@@ -527,7 +527,18 @@ function TrainUpdateTab({ updates, onRefresh }: { updates: TrainUpdateRecord[]; 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Train Number" value={form.trainNo} onChange={(v) => setForm((f) => ({ ...f, trainNo: v }))} />
-            <Field label="Station" value={form.station} onChange={(v) => setForm((f) => ({ ...f, station: v }))} />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Station</label>
+              <select
+                required
+                value={form.station}
+                onChange={(e) => setForm((f) => ({ ...f, station: e.target.value }))}
+                className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">Select a station…</option>
+                {STATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Line</label>
               <select value={form.line} onChange={(e) => setForm((f) => ({ ...f, line: e.target.value as typeof form.line }))} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground">

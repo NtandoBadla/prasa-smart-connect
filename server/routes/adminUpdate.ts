@@ -5,13 +5,13 @@ import { notifySubscribers } from "../mailer";
 
 const router = Router();
 
-const isSupabaseConfigured =
+const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
   !process.env.SUPABASE_URL.includes("REPLACE") &&
   !!process.env.SUPABASE_SERVICE_KEY &&
   !process.env.SUPABASE_SERVICE_KEY.includes("REPLACE");
 
-// POST /api/admin/update — save update + notify subscribers
+// POST /api/admin/update
 router.post("/", async (req, res) => {
   const parsed = TrainUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -21,12 +21,10 @@ router.post("/", async (req, res) => {
 
   const { trainNo, line, station, status, delayMin, reason } = parsed.data;
   const updatedAt = new Date().toISOString();
-
   let notified = 0;
   let failed = 0;
 
-  if (isSupabaseConfigured) {
-    // 1. Persist update
+  if (isSupabaseConfigured()) {
     const { error: dbErr } = await supabase.from("train_updates").insert({
       train_no: trainNo,
       line,
@@ -43,7 +41,6 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    // 2. Fetch subscribers for this station
     const { data: subs, error: subErr } = await supabase
       .from("subscriptions")
       .select("users(email)")
@@ -55,7 +52,6 @@ router.post("/", async (req, res) => {
         .filter(Boolean)
         .flat() as { email: string }[];
 
-      // 3. Send emails
       const result = await notifySubscribers(subscribers, {
         trainNo,
         line,
@@ -72,21 +68,21 @@ router.post("/", async (req, res) => {
       failed = result.failed;
     }
   } else {
-    console.warn("Supabase not configured — update not persisted to DB.");
+    console.warn("Supabase not configured — update not persisted.");
   }
 
   res.json({
-    message: isSupabaseConfigured
+    message: isSupabaseConfigured()
       ? "Train update saved and notifications dispatched."
-      : "Update processed (Supabase not configured — connect DB to persist and notify).",
+      : "Update processed (Supabase not configured).",
     notified,
     failed,
   });
 });
 
-// GET /api/admin/update — recent updates
+// GET /api/admin/update
 router.get("/", async (_req, res) => {
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured()) {
     res.json([]);
     return;
   }

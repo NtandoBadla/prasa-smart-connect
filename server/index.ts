@@ -4,7 +4,7 @@ import cors from "cors";
 import { randomUUID } from "crypto";
 import { supabase } from "./db";
 
-const isSupabaseConfigured =
+const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
   !process.env.SUPABASE_URL.includes("REPLACE") &&
   !!process.env.SUPABASE_SERVICE_KEY &&
@@ -150,7 +150,7 @@ app.delete("/api/admin/news/:id", requireAuth, (req, res) => {
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
-    supabase: isSupabaseConfigured ? "connected" : "not configured",
+    supabase: isSupabaseConfigured() ? "connected" : "not configured",
     emailjs: !!process.env.EMAILJS_SERVICE_ID && !process.env.EMAILJS_SERVICE_ID.includes("REPLACE") ? "configured" : "not configured",
     serpapi: !!process.env.SERPAPI_KEY && !process.env.SERPAPI_KEY.includes("REPLACE") ? "configured" : "not configured",
     openai: !!process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("REPLACE") ? "configured" : "not configured",
@@ -159,7 +159,7 @@ app.get("/api/health", (_req, res) => {
 
 // ── Admin: Subscribers (read from Supabase) ───────────────────────────────────
 app.get("/api/admin/subscribers", requireAuth, async (_req, res) => {
-  if (!isSupabaseConfigured) { res.json([]); return; }
+  if (!isSupabaseConfigured()) { res.json([]); return; }
   const { data, error } = await supabase
     .from("users")
     .select("id, email, station, created_at")
@@ -171,7 +171,7 @@ app.get("/api/admin/subscribers", requireAuth, async (_req, res) => {
 // ── Stats ─────────────────────────────────────────────────────────────────────
 app.get("/api/admin/stats", requireAuth, async (_req, res) => {
   let totalSubscribers = 0;
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured()) {
     const { count } = await supabase.from("users").select("*", { count: "exact", head: true });
     totalSubscribers = count ?? 0;
   }

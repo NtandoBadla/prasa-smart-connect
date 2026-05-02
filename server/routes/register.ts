@@ -4,7 +4,7 @@ import { RegisterSchema } from "../validate";
 
 const router = Router();
 
-const isSupabaseConfigured =
+const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
   !process.env.SUPABASE_URL.includes("REPLACE") &&
   !!process.env.SUPABASE_SERVICE_KEY &&
@@ -19,7 +19,7 @@ router.post("/", async (req, res) => {
 
   const { email, station } = parsed.data;
 
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured()) {
     res.status(503).json({
       error: "Database not connected. Add your SUPABASE_URL and SUPABASE_SERVICE_KEY to .env and restart the server.",
     });

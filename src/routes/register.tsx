@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { api } from "@/lib/api";
 import { STATIONS } from "@/data/prasa";
-import { Bell, CheckCircle, Mail, MapPin, Plus, Trash2 } from "lucide-react";
+import { Bell, CheckCircle, Mail, MapPin, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/register")({
   head: () => ({

@@ -4,7 +4,7 @@ import { SubscribeSchema } from "../validate";
 
 const router = Router();
 
-const isSupabaseConfigured =
+const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
   !process.env.SUPABASE_URL.includes("REPLACE") &&
   !!process.env.SUPABASE_SERVICE_KEY &&
@@ -18,7 +18,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured()) {
     res.status(503).json({
       error: "Database not connected. Add your SUPABASE_URL and SUPABASE_SERVICE_KEY to .env and restart the server.",
     });
@@ -53,7 +53,7 @@ router.post("/", async (req, res) => {
 
 // GET /api/subscribe/:email
 router.get("/:email", async (req, res) => {
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured()) {
     res.json([]);
     return;
   }

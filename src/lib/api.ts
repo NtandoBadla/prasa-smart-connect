@@ -15,6 +15,13 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
+    // Auto-clear stale token and redirect to login on 401
+    if (res.status === 401) {
+      localStorage.removeItem("admin_token");
+      if (window.location.pathname.startsWith("/admin") && !window.location.pathname.includes("/login")) {
+        window.location.href = "/admin/login";
+      }
+    }
     throw new Error(body?.error ?? res.statusText);
   }
   return res.json() as Promise<T>;

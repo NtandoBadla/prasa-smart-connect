@@ -7,10 +7,11 @@ const PRIMARY = [
   { to: "/search", label: "Plan a Trip" },
   { to: "/planner", label: "Trip Planner" },
   { to: "/tracking", label: "Live Trains" },
-  { to: "/map", label: "Network Map" },
+  { to: "/register", label: "Get Alerts" },
 ] as const;
 
 const MORE = [
+  { to: "/map", label: "Network Map" },
   { to: "/fares", label: "Fares & Tickets" },
   { to: "/crowding", label: "Crowding Predictor" },
   { to: "/alerts", label: "Service Alerts" },
@@ -18,8 +19,7 @@ const MORE = [
   { to: "/safety", label: "Safety & SOS" },
   { to: "/lost-found", label: "Lost & Found" },
   { to: "/saved", label: "My Routes" },
-  { to: "/register", label: "Get Notifications" },
-  { to: "/admin", label: "Admin" },
+  { to: "/admin", label: "Login as admin" },
 ] as const;
 
 export function Header() {
