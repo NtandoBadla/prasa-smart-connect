@@ -1,4 +1,5 @@
 import axios from "axios";
+import * as cheerio from "cheerio";
 
 export interface ScrapedTrain {
   trainNo: string;
@@ -10,71 +11,86 @@ export interface ScrapedTrain {
   line: string;
 }
 
+// Key stations to scrape from cttrain.co.za
+const STATION_URLS: { url: string; station: string; line: string }[] = [
+  { url: "https://cttrain.co.za/southern/capetown",    station: "Cape Town",    line: "Southern Line" },
+  { url: "https://cttrain.co.za/southern/claremont",   station: "Claremont",    line: "Southern Line" },
+  { url: "https://cttrain.co.za/southern/wynberg",     station: "Wynberg",      line: "Southern Line" },
+  { url: "https://cttrain.co.za/southern/muizenberg",  station: "Muizenberg",   line: "Southern Line" },
+  { url: "https://cttrain.co.za/southern/fishhoek",    station: "Fish Hoek",    line: "Southern Line" },
+  { url: "https://cttrain.co.za/southern/simonstown",  station: "Simon's Town", line: "Southern Line" },
+  { url: "https://cttrain.co.za/southern/steenberg",   station: "Steenberg",    line: "Southern Line" },
+];
+
 let cache: { data: ScrapedTrain[]; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export async function scrapeTrains(): Promise<ScrapedTrain[]> {
-  // Return cached data if still fresh
   if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return cache.data;
   }
 
-  const apiKey = process.env.SERPAPI_KEY;
-  if (!apiKey) {
-    console.warn("SERPAPI_KEY not set — returning empty scrape results");
-    return [];
-  }
+  const results: ScrapedTrain[] = [];
 
-  try {
-    const response = await axios.get("https://serpapi.com/search", {
-      params: {
-        engine: "google",
-        q: "site:cttrain.co.za train schedule Cape Town",
-        api_key: apiKey,
-        num: 10,
-      },
-      timeout: 10_000,
-    });
-
-    const results: ScrapedTrain[] = [];
-    const organicResults = response.data?.organic_results ?? [];
-
-    for (const r of organicResults) {
-      const snippet: string = r.snippet ?? "";
-      // Parse patterns like "06:15 Cape Town → Simon's Town · On Time"
-      const timePattern = /(\d{2}:\d{2})\s+([A-Za-z' ]+?)\s*[→\-]\s*([A-Za-z' ]+?)\s*[·•]\s*(On Time|Delayed|Cancelled)/gi;
-      let match;
-      while ((match = timePattern.exec(snippet)) !== null) {
-        results.push({
-          trainNo: "LIVE",
-          from: match[2].trim(),
-          to: match[3].trim(),
-          departure: match[1],
-          arrival: "",
-          status: match[4],
-          line: inferLine(match[2].trim(), match[3].trim()),
+  await Promise.allSettled(
+    STATION_URLS.map(async ({ url, station, line }) => {
+      try {
+        const { data: html } = await axios.get(url, {
+          timeout: 8_000,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PRASA-Bot/1.0)" },
         });
+        const $ = cheerio.load(html);
+        const parsed = parseStationPage($, station, line);
+        results.push(...parsed);
+      } catch {
+        // silently skip failed stations
       }
-    }
+    }),
+  );
 
-    cache = { data: results, fetchedAt: Date.now() };
-    return results;
-  } catch (err) {
-    console.error("SerpAPI scrape failed:", (err as Error).message);
-    return cache?.data ?? [];
-  }
+  cache = { data: results, fetchedAt: Date.now() };
+  return results;
 }
 
-function inferLine(from: string, to: string): string {
-  const southern = ["Simon's Town", "Fish Hoek", "Muizenberg", "Wynberg", "Claremont", "Observatory"];
-  const northern = ["Bellville", "Parow", "Goodwood", "Stellenbosch"];
-  const central = ["Khayelitsha", "Mitchells Plain", "Philippi", "Nyanga", "Langa"];
-  const flats = ["Retreat", "Pinelands"];
+function parseStationPage($: cheerio.CheerioAPI, station: string, line: string): ScrapedTrain[] {
+  const trains: ScrapedTrain[] = [];
 
-  const all = [from, to];
-  if (all.some((s) => southern.includes(s))) return "Southern Line";
-  if (all.some((s) => northern.includes(s))) return "Northern Line";
-  if (all.some((s) => central.includes(s))) return "Central Line";
-  if (all.some((s) => flats.includes(s))) return "Cape Flats Line";
-  return "Unknown";
+  // cttrain.co.za lists trains in table rows or list items with time + destination + status
+  $("table tr, .train, .service, .timetable-row").each((_i, el) => {
+    const text = $(el).text().replace(/\s+/g, " ").trim();
+
+    // Match patterns like "06:15 Simon's Town On Time" or "07:05 Cape Town Delayed"
+    const match = text.match(/(\d{2}:\d{2})\s+(.+?)\s+(On Time|Delayed|Cancelled)/i);
+    if (match) {
+      trains.push({
+        trainNo: "LIVE",
+        from: station,
+        to: match[2].trim(),
+        departure: match[1],
+        arrival: "",
+        status: match[3],
+        line,
+      });
+    }
+  });
+
+  // Fallback: scan all text nodes for time patterns
+  if (trains.length === 0) {
+    const bodyText = $("body").text();
+    const timeRegex = /(\d{2}:\d{2})\s+([A-Za-z' ]{3,30}?)\s+(On Time|Delayed|Cancelled)/gi;
+    let m;
+    while ((m = timeRegex.exec(bodyText)) !== null) {
+      trains.push({
+        trainNo: "LIVE",
+        from: station,
+        to: m[2].trim(),
+        departure: m[1],
+        arrival: "",
+        status: m[3],
+        line,
+      });
+    }
+  }
+
+  return trains;
 }

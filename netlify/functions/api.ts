@@ -59,7 +59,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-app.post("/api/admin/login", (req, res) => {
+app.post(["/api/admin/login", "/admin/login"], (req, res) => {
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: "Username and password required" }); return; }
   if (username === ADMIN_USER && password === ADMIN_PASS) {
@@ -71,72 +71,72 @@ app.post("/api/admin/login", (req, res) => {
   }
 });
 
-app.post("/api/admin/logout", requireAuth, (req, res) => {
+app.post(["/api/admin/logout", "/admin/logout"], requireAuth, (req, res) => {
   sessions.delete(req.headers["x-admin-token"] as string);
   res.json({ ok: true });
 });
 
 // ── Public ────────────────────────────────────────────────────────────────────
-app.get("/api/schedules", (_req, res) => res.json(schedules));
-app.get("/api/alerts", (_req, res) => res.json(alerts));
-app.get("/api/news", (_req, res) => res.json(news));
+app.get(["/api/schedules", "/schedules"], (_req, res) => res.json(schedules));
+app.get(["/api/alerts", "/alerts"], (_req, res) => res.json(alerts));
+app.get(["/api/news", "/news"], (_req, res) => res.json(news));
 
 // ── Modular routes ────────────────────────────────────────────────────────────
-app.use("/api/register", registerRouter);
-app.use("/api/subscribe", subscribeRouter);
-app.use("/api/admin/update", requireAuth, adminUpdateRouter);
-app.use("/api/chatbot", chatbotRouter);
+app.use(["/api/register", "/register"], registerRouter);
+app.use(["/api/subscribe", "/subscribe"], subscribeRouter);
+app.use(["/api/admin/update", "/admin/update"], requireAuth, adminUpdateRouter);
+app.use(["/api/chatbot", "/chatbot"], chatbotRouter);
 
 // ── Admin: Schedules ──────────────────────────────────────────────────────────
-app.post("/api/admin/schedules", requireAuth, (req, res) => {
+app.post(["/api/admin/schedules", "/admin/schedules"], requireAuth, (req, res) => {
   const item: TrainSchedule = { ...req.body, id: randomUUID() };
   schedules.push(item); res.status(201).json(item);
 });
-app.put("/api/admin/schedules/:id", requireAuth, (req, res) => {
+app.put(["/api/admin/schedules/:id", "/admin/schedules/:id"], requireAuth, (req, res) => {
   const idx = schedules.findIndex((s) => s.id === req.params.id);
   if (idx === -1) { res.status(404).json({ error: "Not found" }); return; }
   schedules[idx] = { ...schedules[idx], ...req.body, id: req.params.id };
   res.json(schedules[idx]);
 });
-app.delete("/api/admin/schedules/:id", requireAuth, (req, res) => {
+app.delete(["/api/admin/schedules/:id", "/admin/schedules/:id"], requireAuth, (req, res) => {
   schedules = schedules.filter((s) => s.id !== req.params.id);
   res.json({ ok: true });
 });
 
 // ── Admin: Alerts ─────────────────────────────────────────────────────────────
-app.post("/api/admin/alerts", requireAuth, (req, res) => {
+app.post(["/api/admin/alerts", "/admin/alerts"], requireAuth, (req, res) => {
   const item: ServiceAlert = { ...req.body, id: randomUUID(), postedAt: new Date().toISOString() };
   alerts.unshift(item); res.status(201).json(item);
 });
-app.put("/api/admin/alerts/:id", requireAuth, (req, res) => {
+app.put(["/api/admin/alerts/:id", "/admin/alerts/:id"], requireAuth, (req, res) => {
   const idx = alerts.findIndex((a) => a.id === req.params.id);
   if (idx === -1) { res.status(404).json({ error: "Not found" }); return; }
   alerts[idx] = { ...alerts[idx], ...req.body, id: req.params.id };
   res.json(alerts[idx]);
 });
-app.delete("/api/admin/alerts/:id", requireAuth, (req, res) => {
+app.delete(["/api/admin/alerts/:id", "/admin/alerts/:id"], requireAuth, (req, res) => {
   alerts = alerts.filter((a) => a.id !== req.params.id);
   res.json({ ok: true });
 });
 
 // ── Admin: News ───────────────────────────────────────────────────────────────
-app.post("/api/admin/news", requireAuth, (req, res) => {
+app.post(["/api/admin/news", "/admin/news"], requireAuth, (req, res) => {
   const item: NewsItem = { ...req.body, id: randomUUID() };
   news.unshift(item); res.status(201).json(item);
 });
-app.put("/api/admin/news/:id", requireAuth, (req, res) => {
+app.put(["/api/admin/news/:id", "/admin/news/:id"], requireAuth, (req, res) => {
   const idx = news.findIndex((n) => n.id === req.params.id);
   if (idx === -1) { res.status(404).json({ error: "Not found" }); return; }
   news[idx] = { ...news[idx], ...req.body, id: req.params.id };
   res.json(news[idx]);
 });
-app.delete("/api/admin/news/:id", requireAuth, (req, res) => {
+app.delete(["/api/admin/news/:id", "/admin/news/:id"], requireAuth, (req, res) => {
   news = news.filter((n) => n.id !== req.params.id);
   res.json({ ok: true });
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────
-app.get("/api/health", (_req, res) => {
+app.get(["/api/health", "/health"], (_req, res) => {
   res.json({
     status: "ok",
     supabase: isSupabaseConfigured ? "connected" : "not configured",
@@ -147,7 +147,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ── Admin: Subscribers ────────────────────────────────────────────────────────
-app.get("/api/admin/subscribers", requireAuth, async (_req, res) => {
+app.get(["/api/admin/subscribers", "/admin/subscribers"], requireAuth, async (_req, res) => {
   if (!isSupabaseConfigured) { res.json([]); return; }
   const { data, error } = await supabase.from("users").select("id, email, station, created_at").order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: "Failed to fetch subscribers" }); return; }
@@ -155,7 +155,7 @@ app.get("/api/admin/subscribers", requireAuth, async (_req, res) => {
 });
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
-app.get("/api/admin/stats", requireAuth, async (_req, res) => {
+app.get(["/api/admin/stats", "/admin/stats"], requireAuth, async (_req, res) => {
   let totalSubscribers = 0;
   if (isSupabaseConfigured) {
     const { count } = await supabase.from("users").select("*", { count: "exact", head: true });

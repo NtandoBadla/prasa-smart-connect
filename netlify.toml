@@ -9,7 +9,7 @@
 # Route all /api/* requests to the Netlify Function
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api/api/:splat"
+  to = "/.netlify/functions/api/:splat"
   status = 200
 
 # SPA fallback — all other routes serve index.html
@@ -20,4 +20,4 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["@supabase/supabase-js"]
+  external_node_modules = ["@supabase/supabase-js", "cheerio"]
