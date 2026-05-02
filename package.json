@@ -8,7 +8,6 @@
     "server": "tsx watch --tsconfig tsconfig.server.json server/index.ts",
     "test:connections": "tsx --tsconfig tsconfig.server.json scripts/test-connections.ts",
     "build": "vite build",
-    "postbuild": "tsx --tsconfig tsconfig.server.json scripts/generate-index.ts",
     "build:dev": "vite build --mode development",
     "build:netlify": "vite build",
     "preview": "vite preview",
