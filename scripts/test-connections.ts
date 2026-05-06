@@ -18,7 +18,7 @@ async function testSupabase() {
   }
   try {
     const sb = createClient(url, key);
-    const tables = ["users", "subscriptions", "train_updates"];
+    const tables = ["users", "subscriptions", "train_updates", "tickets"];
     const results = await Promise.all(
       tables.map((t) => sb.from(t).select("*", { count: "exact", head: true }))
     );
@@ -136,7 +136,32 @@ async function testOpenAI() {
   }
 }
 
-// ── 5. Local API server ───────────────────────────────────────────────────────
+// ── 5. HuggingFace ────────────────────────────────────────────────────────────
+async function testHuggingFace() {
+  const key = process.env.HUGGINGFACE_API_KEY;
+  if (!key || key.includes("REPLACE") || key.trim() === "") {
+    console.log(`${WARN} HuggingFace  — not set (sentiment uses VADER fallback)`);
+    return false;
+  }
+  try {
+    const res = await axios.post(
+      "https://api-inference.huggingface.co/models/distilbert-base-uncased-finetuned-sst-2-english",
+      { inputs: "test" },
+      { headers: { Authorization: `Bearer ${key}` }, timeout: 8000, validateStatus: () => true }
+    );
+    if (res.status === 200 || res.status === 503) {
+      console.log(`${OK} HuggingFace  — key valid${res.status === 503 ? " (model loading)" : ""}`);
+      return true;
+    }
+    console.log(`${FAIL} HuggingFace  — status ${res.status}: invalid key`);
+    return false;
+  } catch (e: any) {
+    console.log(`${FAIL} HuggingFace  — ${e.message}`);
+    return false;
+  }
+}
+
+// ── 6. Local API server ───────────────────────────────────────────────────────
 async function testAPIServer() {
   try {
     const res = await axios.get("http://localhost:3001/api/health", { timeout: 3000 });
@@ -151,20 +176,22 @@ async function testAPIServer() {
 }
 
 // ── Run all ───────────────────────────────────────────────────────────────────
-const [sb, serp, ejs, oai, api] = await Promise.all([
+const [sb, serp, ejs, oai, hf, api] = await Promise.all([
   testSupabase(),
   testSerpAPI(),
   testEmailJS(),
   testOpenAI(),
+  testHuggingFace(),
   testAPIServer(),
 ]);
 
 console.log("\n\x1b[1m━━━ Summary ━━━\x1b[0m");
-console.log(` Supabase   ${sb   ? OK + " OK"              : FAIL + " FAIL"}`);
-console.log(` SerpAPI    ${serp ? OK + " OK"              : FAIL + " FAIL"}`);
-console.log(` EmailJS    ${ejs  ? OK + " OK"              : FAIL + " FAIL"}`);
-console.log(` OpenAI     ${oai  ? OK + " OK"              : WARN + " not set (optional)"}`);
-console.log(` API Server ${api  ? OK + " running"         : FAIL + " not running"}`);
+console.log(` Supabase    ${sb   ? OK + " OK"              : FAIL + " FAIL"}`);
+console.log(` SerpAPI     ${serp ? OK + " OK"              : FAIL + " FAIL"}`);
+console.log(` EmailJS     ${ejs  ? OK + " OK"              : FAIL + " FAIL"}`);
+console.log(` OpenAI      ${oai  ? OK + " OK"              : WARN + " not set (optional)"}`);
+console.log(` HuggingFace ${hf   ? OK + " OK"              : WARN + " not set (optional)"}`);
+console.log(` API Server  ${api  ? OK + " running"         : FAIL + " not running"}`);
 
 if (!sb) {
   console.log(`
@@ -192,6 +219,20 @@ if (!sb) {
     delay_min integer default 0,
     reason text,
     updated_at timestamptz default now()
+  );
+  create table if not exists tickets (
+    id uuid primary key default gen_random_uuid(),
+    ticket_ref text not null,
+    user_id uuid,
+    train_no text not null,
+    line text not null,
+    from_station text not null,
+    to_station text not null,
+    departure text not null,
+    arrival text,
+    fare numeric default 0,
+    travel_class text default 'Metro',
+    booked_at timestamptz default now()
   );
 `);
 }

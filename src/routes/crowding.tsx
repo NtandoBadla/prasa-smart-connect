@@ -5,7 +5,9 @@ import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
 import { SCHEDULES } from "@/data/prasa";
 import { getCrowding, bestCoach } from "@/data/extras";
-import { Users, Sparkles, Clock } from "lucide-react";
+import { api } from "@/lib/api";
+import { Users, Sparkles, Clock, MessageSquare, ShieldCheck, BarChart2, Loader2 } from "lucide-react";
+import { RadialBarChart, RadialBar, ResponsiveContainer, Tooltip } from "recharts";
 
 export const Route = createFileRoute("/crowding")({
   component: CrowdingPage,
@@ -23,17 +25,61 @@ function isPeak(time: string) {
   return (h >= 6 && h < 9) || (h >= 16 && h < 19);
 }
 
+const SAMPLE_REVIEWS = [
+  "The train was very crowded during peak hours, barely any space to stand",
+  "Security guards were present and I felt safe on the Southern Line",
+  "Delayed again, packed like sardines, terrible experience",
+  "Clean coaches today, on time and comfortable journey",
+  "Crime is a concern at some stations, need more police patrols",
+  "Smooth ride, friendly staff, good service overall",
+];
+
+type SentimentResult = {
+  crowdLevel: "Low" | "Medium" | "High";
+  safetyRating: "Safe" | "Moderate" | "Risky";
+  sentimentScore: number;
+  compound: number;
+  crowdScore: number;
+  huggingFace: { label: string; score: number } | null;
+  analyzedCount: number;
+};
+
 function CrowdingPage() {
   const [trainId, setTrainId] = useState(SCHEDULES[0].id);
   const [time, setTime] = useState(now24h);
+  const [feedbackText, setFeedbackText] = useState(SAMPLE_REVIEWS.join("\n"));
+  const [sentiment, setSentiment] = useState<SentimentResult | null>(null);
+  const [sentimentLoading, setSentimentLoading] = useState(false);
+  const [sentimentError, setSentimentError] = useState("");
 
   const train = SCHEDULES.find((s) => s.id === trainId)!;
-  const loads = useMemo(
-    () => getCrowding(train.trainNo, 8, train.line, time),
-    [train.trainNo, train.line, time],
-  );
+  const loads = useMemo(() => getCrowding(train.trainNo, 8, train.line, time), [train.trainNo, train.line, time]);
   const best = bestCoach(loads);
   const peak = isPeak(time);
+
+  const runSentiment = async () => {
+    const texts = feedbackText.split("\n").map((t) => t.trim()).filter(Boolean);
+    if (texts.length === 0) return;
+    setSentimentLoading(true);
+    setSentimentError("");
+    try {
+      const result = await api.analyzeSentiment(texts);
+      setSentiment(result);
+    } catch {
+      setSentimentError("Could not reach the analysis server. Make sure `npm run server` is running.");
+    } finally {
+      setSentimentLoading(false);
+    }
+  };
+
+  const crowdColor = sentiment?.crowdLevel === "High" ? "text-destructive" : sentiment?.crowdLevel === "Medium" ? "text-warning" : "text-success";
+  const safeColor = sentiment?.safetyRating === "Safe" ? "text-success" : sentiment?.safetyRating === "Moderate" ? "text-warning" : "text-destructive";
+  const crowdBg = sentiment?.crowdLevel === "High" ? "bg-destructive/15 border-destructive/30" : sentiment?.crowdLevel === "Medium" ? "bg-warning/15 border-warning/30" : "bg-success/15 border-success/30";
+  const safeBg = sentiment?.safetyRating === "Safe" ? "bg-success/15 border-success/30" : sentiment?.safetyRating === "Moderate" ? "bg-warning/15 border-warning/30" : "bg-destructive/15 border-destructive/30";
+
+  const chartData = sentiment
+    ? [{ name: "Sentiment", value: sentiment.sentimentScore, fill: sentiment.sentimentScore > 60 ? "#3a9e5f" : sentiment.sentimentScore > 40 ? "#e6a817" : "#d9534f" }]
+    : [];
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -42,10 +88,10 @@ function CrowdingPage() {
       <section className="bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 py-8">
           <h1 className="flex items-center gap-2 text-2xl font-bold md:text-3xl">
-            <Users className="h-6 w-6 text-destructive" /> Crowding & Best Coach
+            <Users className="h-6 w-6 text-destructive" /> Crowding & Sentiment Analysis
           </h1>
           <p className="mt-1 text-sm opacity-90">
-            Skip the squeeze — see which coach is least busy before you board.
+            AI-powered crowd prediction and safety analysis from passenger feedback.
           </p>
         </div>
       </section>
@@ -108,17 +154,12 @@ function CrowdingPage() {
           </div>
           <div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
             {loads.map((c) => {
-              const tone =
-                c.level === "Low" ? "bg-success" :
-                c.level === "Moderate" ? "bg-warning" :
-                c.level === "High" ? "bg-destructive/80" : "bg-destructive";
+              const tone = c.level === "Low" ? "bg-success" : c.level === "Moderate" ? "bg-warning" : c.level === "High" ? "bg-destructive/80" : "bg-destructive";
               const isBest = c.coach === best.coach;
               return (
                 <div
                   key={c.coach}
-                  className={`relative overflow-hidden rounded-md border-2 p-3 text-center text-primary-foreground ${tone} ${
-                    isBest ? "border-foreground ring-2 ring-success" : "border-transparent"
-                  }`}
+                  className={`relative overflow-hidden rounded-md border-2 p-3 text-center text-primary-foreground ${tone} ${isBest ? "border-foreground ring-2 ring-success" : "border-transparent"}`}
                 >
                   <div className="text-[10px] font-semibold uppercase tracking-wider opacity-90">Coach</div>
                   <div className="text-2xl font-bold">{c.coach}</div>
@@ -136,15 +177,97 @@ function CrowdingPage() {
           </div>
         </div>
 
-        {/* Tips */}
-        <div className="rounded-md border border-border bg-card p-5 shadow-card">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Boarding tips for {train.line}</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>• <strong>Coaches 1–2 (front):</strong> Closest to the station exit at Cape Town — always most crowded</li>
-            <li>• <strong>Coaches 3–5 (middle):</strong> Moderate — good balance of space and exit access</li>
-            <li>• <strong>Coaches 6–8 (rear):</strong> Least crowded — best choice during peak hours</li>
-            {peak && <li className="text-destructive">• Peak hour: trains fill up fast — arrive 5 min early</li>}
-          </ul>
+        {/* ── Sentiment Analysis Section ── */}
+        <div className="rounded-md border border-border bg-card p-5 shadow-card space-y-4">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">Passenger Sentiment Analysis</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Paste passenger reviews or feedback below. The AI will analyze crowd levels and safety ratings using VADER + Hugging Face.
+          </p>
+
+          <textarea
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            rows={6}
+            placeholder="Enter one review per line…"
+            className="w-full rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 resize-none"
+          />
+
+          <button
+            onClick={runSentiment}
+            disabled={sentimentLoading}
+            className="flex items-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            {sentimentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart2 className="h-4 w-4" />}
+            {sentimentLoading ? "Analyzing…" : "Analyze Sentiment"}
+          </button>
+
+          {sentimentError && (
+            <p className="text-sm text-destructive">{sentimentError}</p>
+          )}
+
+          {sentiment && (
+            <div className="space-y-4 pt-2">
+              {/* Badges */}
+              <div className="flex flex-wrap gap-3">
+                <div className={`flex items-center gap-2 rounded-md border px-4 py-3 ${crowdBg}`}>
+                  <Users className={`h-5 w-5 ${crowdColor}`} />
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Crowd Level</div>
+                    <div className={`text-lg font-bold ${crowdColor}`}>{sentiment.crowdLevel}</div>
+                  </div>
+                </div>
+                <div className={`flex items-center gap-2 rounded-md border px-4 py-3 ${safeBg}`}>
+                  <ShieldCheck className={`h-5 w-5 ${safeColor}`} />
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Safety Rating</div>
+                    <div className={`text-lg font-bold ${safeColor}`}>{sentiment.safetyRating}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-4 py-3">
+                  <BarChart2 className="h-5 w-5 text-primary" />
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sentiment Score</div>
+                    <div className="text-lg font-bold text-foreground">{sentiment.sentimentScore}/100</div>
+                  </div>
+                </div>
+                {sentiment.huggingFace && (
+                  <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-4 py-3">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">HuggingFace</div>
+                      <div className="text-sm font-bold text-foreground">
+                        {sentiment.huggingFace.label} ({(sentiment.huggingFace.score * 100).toFixed(0)}%)
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Radial chart */}
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadialBarChart
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="60%"
+                    outerRadius="90%"
+                    data={chartData}
+                    startAngle={90}
+                    endAngle={90 - (sentiment.sentimentScore / 100) * 360}
+                  >
+                    <RadialBar dataKey="value" cornerRadius={8} background={{ fill: "hsl(var(--secondary))" }} />
+                    <Tooltip formatter={(v) => [`${v}/100`, "Sentiment"]} />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+                <p className="text-center text-xs text-muted-foreground -mt-4">
+                  Overall sentiment from {sentiment.analyzedCount} review{sentiment.analyzedCount !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
       </section>

@@ -15,6 +15,8 @@ import registerRouter from "./routes/register";
 import subscribeRouter from "./routes/subscribe";
 import adminUpdateRouter from "./routes/adminUpdate";
 import chatbotRouter from "./routes/chatbot";
+import ticketsRouter from "./routes/tickets";
+import sentimentRouter from "./routes/sentiment";
 
 // ── In-memory store (schedules / alerts / news) ───────────────────────────────
 import type { TrainSchedule, ServiceAlert } from "../src/data/prasa";
@@ -94,6 +96,8 @@ app.use("/api/register", registerRouter);
 app.use("/api/subscribe", subscribeRouter);
 app.use("/api/admin/update", requireAuth, adminUpdateRouter);
 app.use("/api/chatbot", chatbotRouter);
+app.use("/api/tickets", ticketsRouter);
+app.use("/api/sentiment", sentimentRouter);
 
 // ── Admin: Schedules CRUD ─────────────────────────────────────────────────────
 app.post("/api/admin/schedules", requireAuth, (req, res) => {

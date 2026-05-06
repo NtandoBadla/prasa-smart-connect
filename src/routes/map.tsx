@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
-import { NETWORK_LAYOUT, LINE_COLORS, LINE_PATHS } from "@/data/extras";
+import { LINE_COLORS } from "@/data/extras";
 import { Map as MapIcon } from "lucide-react";
 
 export const Route = createFileRoute("/map")({
@@ -11,20 +11,170 @@ export const Route = createFileRoute("/map")({
     meta: [
       { title: "Network Map — PRASA Smart Commute" },
       { name: "description", content: "Interactive Cape Town Metrorail network map with all lines and stations." },
-      { property: "og:title", content: "Network Map — PRASA" },
-      { property: "og:description", content: "Explore the Cape Town Metrorail network." },
     ],
   }),
   component: MapPage,
 });
 
+// Real GPS coordinates for Cape Town Metrorail stations
+const STATION_COORDS: Record<string, [number, number]> = {
+  "Cape Town":       [-33.9249, 18.4241],
+  "Woodstock":       [-33.9280, 18.4380],
+  "Salt River":      [-33.9310, 18.4620],
+  "Observatory":     [-33.9380, 18.4710],
+  "Mowbray":         [-33.9440, 18.4760],
+  "Rondebosch":      [-33.9560, 18.4730],
+  "Newlands":        [-33.9640, 18.4680],
+  "Claremont":       [-33.9740, 18.4650],
+  "Wynberg":         [-33.9990, 18.4640],
+  "Retreat":         [-34.0380, 18.4900],
+  "Muizenberg":      [-34.1060, 18.4700],
+  "Fish Hoek":       [-34.1380, 18.4280],
+  "Simon's Town":    [-34.1880, 18.4360],
+  "Pinelands":       [-33.9380, 18.5050],
+  "Goodwood":        [-33.9100, 18.5480],
+  "Parow":           [-33.9040, 18.5900],
+  "Bellville":       [-33.8990, 18.6290],
+  "Stellenbosch":    [-33.9360, 18.8600],
+  "Langa":           [-33.9490, 18.5240],
+  "Nyanga":          [-33.9870, 18.5490],
+  "Philippi":        [-34.0100, 18.5700],
+  "Mitchells Plain": [-34.0480, 18.6150],
+  "Khayelitsha":     [-34.0420, 18.6730],
+};
+
+const LINE_PATHS: Record<string, string[]> = {
+  "Southern Line":   ["Cape Town","Salt River","Observatory","Mowbray","Rondebosch","Newlands","Claremont","Wynberg","Retreat","Muizenberg","Fish Hoek","Simon's Town"],
+  "Northern Line":   ["Cape Town","Salt River","Pinelands","Goodwood","Parow","Bellville","Stellenbosch"],
+  "Central Line":    ["Cape Town","Salt River","Langa","Nyanga","Philippi","Mitchells Plain","Khayelitsha"],
+  "Cape Flats Line": ["Cape Town","Salt River","Pinelands","Nyanga","Philippi","Retreat"],
+};
+
+// Convert LINE_COLORS oklch to hex for Leaflet
+const LEAFLET_LINE_COLORS: Record<string, string> = {
+  "Southern Line":   "#d9534f",
+  "Northern Line":   "#2c5f9e",
+  "Central Line":    "#3a9e5f",
+  "Cape Flats Line": "#e6a817",
+};
+
 function MapPage() {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const leafletRef = useRef<any>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [activeLine, setActiveLine] = useState<string | null>(null);
+  const markersRef = useRef<Record<string, any>>({});
+
+  useEffect(() => {
+    if (!mapRef.current || leafletRef.current) return;
+
+    // Dynamically import Leaflet to avoid SSR issues
+    import("leaflet").then((L) => {
+      // Fix default icon paths
+      delete (L.Icon.Default.prototype as any)._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      });
+
+      const map = L.map(mapRef.current!, {
+        center: [-33.97, 18.55],
+        zoom: 11,
+        zoomControl: true,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+        maxZoom: 18,
+      }).addTo(map);
+
+      leafletRef.current = { map, L, polylines: {} as Record<string, any>, markers: {} as Record<string, any> };
+
+      // Draw lines
+      Object.entries(LINE_PATHS).forEach(([line, stops]) => {
+        const coords = stops.map((s) => STATION_COORDS[s]).filter(Boolean);
+        const poly = L.polyline(coords, {
+          color: LEAFLET_LINE_COLORS[line],
+          weight: 4,
+          opacity: 0.85,
+        }).addTo(map);
+        leafletRef.current.polylines[line] = poly;
+      });
+
+      // Draw station markers
+      const stationLines: Record<string, string[]> = {};
+      Object.entries(LINE_PATHS).forEach(([line, stops]) => {
+        stops.forEach((s) => {
+          if (!stationLines[s]) stationLines[s] = [];
+          stationLines[s].push(line);
+        });
+      });
+
+      Object.entries(STATION_COORDS).forEach(([name, coords]) => {
+        const lines = stationLines[name] ?? [];
+        const isHub = lines.length >= 2;
+        const circleMarker = L.circleMarker(coords, {
+          radius: isHub ? 8 : 5,
+          fillColor: "white",
+          color: "#1a1a2e",
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 1,
+        })
+          .addTo(map)
+          .bindTooltip(name, { permanent: false, direction: "top" });
+
+        circleMarker.on("click", () => {
+          setSelected(name);
+        });
+
+        leafletRef.current.markers[name] = circleMarker;
+        markersRef.current[name] = circleMarker;
+      });
+    });
+
+    return () => {
+      if (leafletRef.current?.map) {
+        leafletRef.current.map.remove();
+        leafletRef.current = null;
+      }
+    };
+  }, []);
+
+  // Highlight selected station
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const { L, markers } = leafletRef.current;
+    Object.entries(markers).forEach(([name, marker]: [string, any]) => {
+      marker.setStyle({
+        fillColor: name === selected ? LEAFLET_LINE_COLORS["Southern Line"] : "white",
+        radius: name === selected ? 10 : (Object.values(LINE_PATHS).filter((s) => s.includes(name)).length >= 2 ? 8 : 5),
+      });
+    });
+  }, [selected]);
+
+  // Dim/highlight lines by active filter
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const { polylines } = leafletRef.current;
+    Object.entries(polylines).forEach(([line, poly]: [string, any]) => {
+      poly.setStyle({ opacity: !activeLine || activeLine === line ? 0.85 : 0.15 });
+    });
+  }, [activeLine]);
+
+  const selectedLines = selected
+    ? Object.entries(LINE_PATHS)
+        .filter(([, stops]) => stops.includes(selected))
+        .map(([line]) => line)
+    : [];
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
+
+      {/* Leaflet CSS */}
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
       <section className="bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 py-8">
@@ -46,7 +196,7 @@ function MapPage() {
           >
             All lines
           </button>
-          {Object.entries(LINE_COLORS).map(([line, color]) => (
+          {Object.entries(LEAFLET_LINE_COLORS).map(([line, color]) => (
             <button
               key={line}
               onClick={() => setActiveLine(line === activeLine ? null : line)}
@@ -61,63 +211,15 @@ function MapPage() {
           ))}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="overflow-hidden rounded-md border border-border bg-card p-2 shadow-card">
-            <svg viewBox="0 0 540 520" className="h-auto w-full">
-              {/* Lines */}
-              {Object.entries(LINE_PATHS).map(([line, stops]) => {
-                const dim = activeLine && activeLine !== line ? 0.15 : 1;
-                const points = stops.map((s) => NETWORK_LAYOUT[s]).filter(Boolean);
-                if (points.length < 2) return null;
-                const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-                return (
-                  <path
-                    key={line}
-                    d={d}
-                    fill="none"
-                    stroke={LINE_COLORS[line]}
-                    strokeWidth={5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity={dim}
-                  />
-                );
-              })}
-              {/* Stations */}
-              {Object.entries(NETWORK_LAYOUT).map(([name, pos]) => {
-                const isInLine = !activeLine || pos.lines.includes(activeLine);
-                const isHub = pos.lines.length >= 2;
-                const isSel = selected === name;
-                return (
-                  <g
-                    key={name}
-                    transform={`translate(${pos.x},${pos.y})`}
-                    className="cursor-pointer"
-                    onClick={() => setSelected(name)}
-                    opacity={isInLine ? 1 : 0.25}
-                  >
-                    <circle
-                      r={isSel ? 9 : isHub ? 7 : 5}
-                      fill={isSel ? "oklch(0.55 0.22 27)" : "white"}
-                      stroke="oklch(0.18 0.04 250)"
-                      strokeWidth={2.5}
-                    />
-                    <text
-                      x={pos.x > 400 ? -10 : 12}
-                      y={4}
-                      textAnchor={pos.x > 400 ? "end" : "start"}
-                      fontSize="10"
-                      fontWeight={isHub ? 700 : 500}
-                      fill="oklch(0.18 0.04 250)"
-                    >
-                      {name}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          {/* Leaflet Map */}
+          <div
+            ref={mapRef}
+            className="h-[500px] overflow-hidden rounded-md border border-border shadow-card"
+            style={{ zIndex: 0 }}
+          />
 
+          {/* Station detail panel */}
           <aside className="rounded-md border border-border bg-card p-5 shadow-card">
             {selected ? (
               <>
@@ -126,17 +228,22 @@ function MapPage() {
                 <div className="mt-3 space-y-1">
                   <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lines</div>
                   <div className="flex flex-wrap gap-1.5">
-                    {NETWORK_LAYOUT[selected].lines.map((l) => (
+                    {selectedLines.map((l) => (
                       <span
                         key={l}
                         className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-                        style={{ backgroundColor: LINE_COLORS[l] }}
+                        style={{ backgroundColor: LEAFLET_LINE_COLORS[l] }}
                       >
                         {l}
                       </span>
                     ))}
                   </div>
                 </div>
+                {STATION_COORDS[selected] && (
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    {STATION_COORDS[selected][0].toFixed(4)}°S, {STATION_COORDS[selected][1].toFixed(4)}°E
+                  </div>
+                )}
                 <div className="mt-5 flex flex-col gap-2">
                   <Link
                     to="/search"
@@ -155,7 +262,7 @@ function MapPage() {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">Select a station on the map to see details and plan a trip.</p>
+              <p className="text-sm text-muted-foreground">Click a station on the map to see details and plan a trip.</p>
             )}
           </aside>
         </div>

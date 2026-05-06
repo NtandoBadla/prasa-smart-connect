@@ -16,10 +16,11 @@ const MORE = [
   { to: "/crowding", label: "Crowding Predictor" },
   { to: "/alerts", label: "Service Alerts" },
   { to: "/news", label: "News" },
+  { to: "/tickets", label: "My Tickets" },
   { to: "/safety", label: "Safety & SOS" },
   { to: "/lost-found", label: "Lost & Found" },
   { to: "/saved", label: "My Routes" },
-  { to: "/admin", label: "Login as admin" },
+  { to: "/admin", label: "Administrator" },
 ] as const;
 
 export function Header() {
