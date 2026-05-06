@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
 import { LINE_COLORS } from "@/data/extras";
 import { Map as MapIcon } from "lucide-react";
+import "leaflet/dist/leaflet.css";
 
 export const Route = createFileRoute("/map")({
   head: () => ({
@@ -172,9 +173,6 @@ function MapPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
-
-      {/* Leaflet CSS */}
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
       <section className="bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 py-8">
