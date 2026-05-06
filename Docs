@@ -1,0 +1,119 @@
+# 📌 Project Work Allocation Document
+
+## Train Tracking AI System
+
+---
+
+## 1. 📖 Overview
+
+This document defines the **roles, responsibilities, and task allocation** for the development of the Train Tracking AI System. The goal is to ensure clear ownership, efficient collaboration, and successful delivery of all system components.
+
+---
+
+## 2. 👥 Team Members & Responsibilities
+
+### 🧑‍💻 Ntando Badla
+
+**Role:** Backend Developer & System Integration
+
+**Responsibilities:**
+
+* Develop and maintain the **Alerts System** (email notifications – already implemented, ensure stability and scalability)
+* Design and manage the **database (Supabase)**:
+
+  * User data (email, location)
+  * Ticket history
+  * Subscription data
+* Handle **data updates and synchronization**:
+
+  * Integrate scraped train data into the system
+  * Ensure real-time updates are reflected accurately
+* Build and maintain backend APIs:
+
+  * `/register`
+  * `/subscribe`
+  * `/admin/update`
+* Ensure **system performance, security, and error handling**
+
+---
+
+### 🧠 Semoshwe
+
+**Role:** AI/ML Engineer (Sentiment Analysis)
+
+**Responsibilities:**
+
+* Develop the **Crowding & Safety Prediction System**
+* Integrate:
+
+  * Hugging Face models
+  * VADER sentiment analysis
+* Process input data (reviews, feedback, scraped text)
+* Classify results into:
+
+  * Crowd Level (Low / Medium / High)
+  * Safety Rating (Safe / Moderate / Risky)
+* Optimize model performance and accuracy
+* Provide structured output for frontend display (charts, indicators)
+* Collaborate with backend for API integration
+
+---
+
+### 🤖 Anita
+
+**Role:** AI Chatbot Developer
+
+**Responsibilities:**
+
+* Design and implement the **AI Chatbot**
+* Enable chatbot to:
+
+  * Answer train availability questions
+  * Explain delays
+  * Recommend best train routes
+* Integrate chatbot with:
+
+  * Real-time train data
+  * Sentiment analysis results (for smarter recommendations)
+* Ensure conversational accuracy and user-friendly responses
+* Handle chatbot API (`/chatbot`)
+* Improve response quality and context handling
+
+---
+
+## 3. 🔗 Collaboration & Integration
+
+* All team members must ensure their components are **API-driven and modular**
+* Regular integration checkpoints must be conducted:
+
+  * Backend ↔ Chatbot
+  * Backend ↔ Sentiment Analysis
+* Shared database (Supabase) must be consistently structured and documented
+* Use version control (Git) for collaboration and tracking progress
+
+---
+
+## 4. 📅 Workflow & Communication
+
+* Weekly progress updates
+* Task tracking via shared tool (e.g., Trello, Jira, or GitHub Projects)
+* Immediate communication for blockers or integration issues
+
+---
+
+## 5. 🎯 Project Goal
+
+To build a **scalable, AI-powered train tracking system** that delivers:
+
+* Real-time updates
+* Intelligent insights
+* Automated notifications
+* Enhanced commuter experience
+
+---
+
+## 6. ✅ Conclusion
+
+This work allocation ensures that each team member has **clear ownership** of critical system components while encouraging collaboration across all modules. Successful coordination will result in a robust, efficient, and user-centered solution.
+
+---
