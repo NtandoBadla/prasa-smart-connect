@@ -7,9 +7,9 @@ import { AlertsBanner } from "@/components/AlertsBanner";
 import { Chatbot } from "@/components/Chatbot";
 import { RouteSearchForm } from "@/components/RouteSearchForm";
 import { TrainCard } from "@/components/TrainCard";
-import { searchTrains, type TrainSchedule } from "@/data/prasa";
+import { searchTrains, SCHEDULES, type TrainSchedule } from "@/data/prasa";
 import { api } from "@/lib/api";
-import { Search as SearchIcon, Ticket, X, CheckCircle } from "lucide-react";
+import { Search as SearchIcon, Ticket, X, CheckCircle, Clock } from "lucide-react";
 
 const searchSchema = z.object({
   from: z.string().optional().default(""),
@@ -28,6 +28,19 @@ export const Route = createFileRoute("/search")({
   component: SearchPage,
 });
 
+function matchRoute(schedules: TrainSchedule[], from: string, to: string): TrainSchedule[] {
+  const f = from.trim().toLowerCase();
+  const t = to.trim().toLowerCase();
+  return schedules
+    .filter((s) => {
+      const stops = s.stops.map((x) => x.toLowerCase());
+      const fi = stops.indexOf(f);
+      const ti = stops.indexOf(t);
+      return fi !== -1 && ti !== -1 && fi < ti;
+    })
+    .sort((a, b) => a.departure.localeCompare(b.departure));
+}
+
 function SearchPage() {
   const navigate = Route.useNavigate();
   const { from, to, time } = Route.useSearch();
@@ -40,24 +53,21 @@ function SearchPage() {
     api.schedules().then(setLiveSchedules).catch(() => {});
   }, []);
 
-  const allSchedules = liveSchedules.length > 0 ? liveSchedules : undefined;
+  const { results, isWrapped, noRoute } = useMemo(() => {
+    if (!from || !to) return { results: [], isWrapped: false, noRoute: false };
 
-  const results = useMemo(() => {
-    if (!from || !to) return [];
-    if (allSchedules) {
-      const f = from.trim().toLowerCase();
-      const t = to.trim().toLowerCase();
-      let res = allSchedules.filter((s) => {
-        const stops = s.stops.map((x) => x.toLowerCase());
-        const fi = stops.indexOf(f);
-        const ti = stops.indexOf(t);
-        return fi !== -1 && ti !== -1 && fi < ti;
-      });
-      if (time) res = res.filter((s) => s.departure >= time);
-      return res.sort((a, b) => a.departure.localeCompare(b.departure));
-    }
-    return searchTrains(from, to, time);
-  }, [from, to, time, allSchedules]);
+    const pool = liveSchedules.length > 0 ? liveSchedules : SCHEDULES;
+    const allOnRoute = matchRoute(pool, from, to);
+
+    if (allOnRoute.length === 0) return { results: [], isWrapped: false, noRoute: true };
+    if (!time) return { results: allOnRoute, isWrapped: false, noRoute: false };
+
+    const afterTime = allOnRoute.filter((s) => s.departure >= time);
+    if (afterTime.length > 0) return { results: afterTime, isWrapped: false, noRoute: false };
+
+    // No trains after requested time — show all trains on the route
+    return { results: allOnRoute, isWrapped: true, noRoute: false };
+  }, [from, to, time, liveSchedules]);
 
   const handleSearch = (f: string, t: string, ti: string) => {
     navigate({ search: { from: f, to: t, time: ti } });
@@ -78,7 +88,6 @@ function SearchPage() {
       setGeneratedTicket(ticket);
       setTicketModal(null);
     } catch {
-      // Server not running — generate a local ticket ref
       setGeneratedTicket({
         ticket_ref: `TKT-${Date.now().toString(36).toUpperCase()}`,
         booked_at: new Date().toISOString(),
@@ -111,17 +120,23 @@ function SearchPage() {
             title="Search to see trains"
             desc="Enter a departure and destination station above. Try Cape Town to Simon's Town."
           />
-        ) : results.length === 0 ? (
+        ) : noRoute ? (
           <EmptyState
-            title="No direct trains found"
-            desc={`We couldn't find a service from ${from} to ${to}${time ? ` after ${time}` : ""}. Try a different time or nearby station.`}
+            title="No service on this route"
+            desc={`There is no direct Metrorail service from ${from} to ${to}. Try the Trip Planner for routes with transfers.`}
           />
         ) : (
           <>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-semibold text-foreground">
                 {results.length} train{results.length > 1 ? "s" : ""} from {from} to {to}
               </h2>
+              {isWrapped && (
+                <div className="flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-semibold text-warning">
+                  <Clock className="h-3.5 w-3.5" />
+                  No trains after {time} — showing all available services
+                </div>
+              )}
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               {results.map((t) => (
@@ -151,12 +166,12 @@ function SearchPage() {
               </button>
             </div>
             <div className="mt-4 space-y-2 rounded-sm bg-secondary/40 p-4 text-sm">
-              <Row label="Route" value={`${ticketModal.from} → ${ticketModal.to}`} />
-              <Row label="Train" value={`#${ticketModal.trainNo} · ${ticketModal.line}`} />
-              <Row label="Departs" value={ticketModal.departure} />
-              <Row label="Arrives" value={ticketModal.arrival} />
+              <Row label="Route"    value={`${ticketModal.from} → ${ticketModal.to}`} />
+              <Row label="Train"    value={`#${ticketModal.trainNo} · ${ticketModal.line}`} />
+              <Row label="Departs"  value={ticketModal.departure} />
+              <Row label="Arrives"  value={ticketModal.arrival} />
               <Row label="Platform" value={ticketModal.platform} />
-              <Row label="Fare" value={`R ${ticketModal.fare.toFixed(2)}`} />
+              <Row label="Fare"     value={`R ${ticketModal.fare.toFixed(2)}`} />
             </div>
             <button
               onClick={() => handleGenerateTicket(ticketModal)}

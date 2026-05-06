@@ -223,14 +223,19 @@ export const ALERTS: ServiceAlert[] = [
 export function searchTrains(from: string, to: string, time?: string): TrainSchedule[] {
   const f = from.trim().toLowerCase();
   const t = to.trim().toLowerCase();
-  let results = SCHEDULES.filter((s) => {
+  const all = SCHEDULES.filter((s) => {
     const stops = s.stops.map((x) => x.toLowerCase());
     const fi = stops.indexOf(f);
     const ti = stops.indexOf(t);
     return fi !== -1 && ti !== -1 && fi < ti;
-  });
-  if (time) {
-    results = results.filter((s) => s.departure >= time);
-  }
-  return results.sort((a, b) => a.departure.localeCompare(b.departure));
+  }).sort((a, b) => a.departure.localeCompare(b.departure));
+
+  if (!time) return all;
+
+  // Return trains departing at or after the requested time
+  const afterTime = all.filter((s) => s.departure >= time);
+
+  // If nothing runs after that time, wrap around and show all trains for the route
+  // so the user always sees options rather than an empty result
+  return afterTime.length > 0 ? afterTime : all;
 }
