@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
 import { STATIONS } from "@/data/prasa";
-import { Search, CheckCircle2, PackageSearch } from "lucide-react";
+import { api } from "@/lib/api";
+import { Search, CheckCircle2, PackageSearch, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/lost-found")({
   head: () => ({
@@ -16,46 +17,53 @@ export const Route = createFileRoute("/lost-found")({
   component: LostFoundPage,
 });
 
-interface Report {
+type Report = {
   id: string;
   item: string;
   station: string;
   date: string;
-  contact: string;
+  contact_ref: string;
   status: "open" | "matched";
-}
-
-const SEED: Report[] = [
-  { id: "1", item: "Black backpack with laptop", station: "Cape Town", date: "2025-04-22", contact: "ref-A1", status: "open" },
-  { id: "2", item: "Blue umbrella", station: "Bellville", date: "2025-04-21", contact: "ref-A2", status: "matched" },
-  { id: "3", item: "School blazer (Wynberg High)", station: "Wynberg", date: "2025-04-20", contact: "ref-A3", status: "open" },
-];
+  created_at: string;
+};
 
 function LostFoundPage() {
-  const [reports, setReports] = useState<Report[]>(SEED);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loadingReports, setLoadingReports] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+
   const [item, setItem] = useState("");
   const [station, setStation] = useState(STATIONS[0]);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [contact, setContact] = useState("");
   const [query, setQuery] = useState("");
 
-  const submit = (e: React.FormEvent) => {
+  useEffect(() => {
+    api.getLostFound()
+      .then(setReports)
+      .catch(() => setReports([]))
+      .finally(() => setLoadingReports(false));
+  }, []);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!item.trim() || !contact.trim()) return;
-    const r: Report = {
-      id: String(Date.now()),
-      item: item.trim().slice(0, 120),
-      station,
-      date,
-      contact: contact.trim().slice(0, 60),
-      status: "open",
-    };
-    setReports([r, ...reports]);
-    setSubmitted(true);
-    setItem("");
-    setContact("");
-    setTimeout(() => setSubmitted(false), 3000);
+    setSubmitting(true);
+    setError("");
+    try {
+      const newReport = await api.reportLostFound({ item, station, date, contact });
+      setReports((prev) => [newReport, ...prev]);
+      setSubmitted(true);
+      setItem("");
+      setContact("");
+      setTimeout(() => setSubmitted(false), 3500);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to submit. Make sure the server is running.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const filtered = reports.filter(
@@ -76,6 +84,7 @@ function LostFoundPage() {
       </section>
 
       <section className="container mx-auto grid flex-1 gap-6 px-4 py-8 lg:grid-cols-[1fr_1.4fr]">
+        {/* Submit form */}
         <form onSubmit={submit} className="rounded-md border border-border bg-card p-5 shadow-card">
           <h2 className="text-base font-semibold text-foreground">Report a lost item</h2>
           <div className="mt-4 space-y-3">
@@ -103,28 +112,36 @@ function LostFoundPage() {
                 className="w-full rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </Field>
-            <Field label="Contact reference (email or phone)">
+            <Field label="Contact (email or phone)">
               <input
-                value={contact} maxLength={60} required
+                value={contact} maxLength={120} required
                 onChange={(e) => setContact(e.target.value)}
-                placeholder="we'll only show a reference id publicly"
+                placeholder="Kept private — only a reference ID is shown publicly"
                 className="w-full rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </Field>
+
             <button
               type="submit"
-              className="w-full rounded-sm bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground hover:opacity-90"
+              disabled={submitting}
+              className="flex w-full items-center justify-center gap-2 rounded-sm bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-50"
             >
-              Submit report
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {submitting ? "Submitting…" : "Submit report"}
             </button>
+
             {submitted && (
               <div className="flex items-center gap-2 rounded-sm border border-success/40 bg-success/10 p-3 text-sm text-success">
-                <CheckCircle2 className="h-4 w-4" /> Report submitted. Our team will be in touch.
+                <CheckCircle2 className="h-4 w-4" /> Report saved. Our team will be in touch.
               </div>
+            )}
+            {error && (
+              <p className="rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
             )}
           </div>
         </form>
 
+        {/* Reports list */}
         <div>
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -135,32 +152,41 @@ function LostFoundPage() {
               className="w-full rounded-sm border border-input bg-background py-2 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
           </div>
-          <div className="space-y-3">
-            {filtered.map((r) => (
-              <article key={r.id} className="rounded-md border border-border bg-card p-4 shadow-card">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-foreground">{r.item}</h3>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      r.status === "matched"
-                        ? "bg-success/15 text-success border border-success/30"
-                        : "bg-warning/20 text-foreground border border-warning/40"
-                    }`}
-                  >
-                    {r.status === "matched" ? "Matched" : "Open"}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {r.station} · {new Date(r.date).toLocaleDateString("en-ZA")} · Ref {r.contact}
+
+          {loadingReports ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-20 animate-pulse rounded-md border border-border bg-card" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((r) => (
+                <article key={r.id} className="rounded-md border border-border bg-card p-4 shadow-card">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-foreground">{r.item}</h3>
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                        r.status === "matched"
+                          ? "border-success/30 bg-success/15 text-success"
+                          : "border-warning/40 bg-warning/20 text-foreground"
+                      }`}
+                    >
+                      {r.status === "matched" ? "Matched" : "Open"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {r.station} · {new Date(r.date).toLocaleDateString("en-ZA")} · Ref {r.contact_ref}
+                  </p>
+                </article>
+              ))}
+              {filtered.length === 0 && (
+                <p className="rounded-md border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
+                  No matching reports.
                 </p>
-              </article>
-            ))}
-            {filtered.length === 0 && (
-              <p className="rounded-md border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
-                No matching reports.
-              </p>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

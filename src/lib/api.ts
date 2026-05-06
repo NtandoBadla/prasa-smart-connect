@@ -186,4 +186,55 @@ export const api = {
       huggingFace: { label: string; score: number } | null;
       analyzedCount: number;
     }>("/sentiment", { method: "POST", body: JSON.stringify({ texts }) }),
+
+  // ── Lost & Found ────────────────────────────────────────────────────────────
+  getLostFound: () =>
+    apiFetch<{
+      id: string;
+      item: string;
+      station: string;
+      date: string;
+      contact_ref: string;
+      status: "open" | "matched";
+      created_at: string;
+    }[]>("/lost-found"),
+
+  reportLostFound: (data: { item: string; station: string; date: string; contact: string }) =>
+    apiFetch<{
+      id: string;
+      item: string;
+      station: string;
+      date: string;
+      contact_ref: string;
+      status: "open" | "matched";
+      created_at: string;
+    }>("/lost-found", { method: "POST", body: JSON.stringify(data) }),
+
+  // ── Safety Incidents ────────────────────────────────────────────────────────
+  reportSafetyIncident: (data: { type: string; station: string; details: string }) =>
+    apiFetch<{
+      id: string;
+      type: string;
+      station: string;
+      details: string;
+      status: string;
+      created_at: string;
+    }>("/safety", { method: "POST", body: JSON.stringify(data) }),
+
+  // ── Admin: Safety incidents ─────────────────────────────────────────────────────
+  adminSafetyIncidents: () =>
+    apiFetch<{
+      id: string;
+      type: string;
+      station: string;
+      details: string;
+      status: string;
+      created_at: string;
+    }[]>("/admin/safety"),
+
+  updateSafetyStatus: (id: string, status: string) =>
+    apiFetch<{ id: string; status: string }>(`/admin/safety/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 };

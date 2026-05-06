@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import { randomUUID } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { supabase } from "./db";
 
 const isSupabaseConfigured = () =>
@@ -17,6 +17,8 @@ import adminUpdateRouter from "./routes/adminUpdate";
 import chatbotRouter from "./routes/chatbot";
 import ticketsRouter from "./routes/tickets";
 import sentimentRouter from "./routes/sentiment";
+import lostFoundRouter from "./routes/lostFound";
+import safetyRouter from "./routes/safety";
 
 // ── In-memory store (schedules / alerts / news) ───────────────────────────────
 import type { TrainSchedule, ServiceAlert } from "../src/data/prasa";
@@ -54,14 +56,32 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// ── Session auth ──────────────────────────────────────────────────────────────
+// ── JWT-style token auth (stateless) ─────────────────────────────────────────
 const ADMIN_USER = process.env.ADMIN_USER ?? "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS ?? "prasa2025";
-const sessions = new Set<string>();
+const JWT_SECRET = process.env.ADMIN_JWT_SECRET ?? "prasa-secret-change-me";
+
+function signToken(payload: string): string {
+  const sig = createHmac("sha256", JWT_SECRET).update(payload).digest("hex");
+  return `${payload}.${sig}`;
+}
+
+function verifyToken(token: string): boolean {
+  const lastDot = token.lastIndexOf(".");
+  if (lastDot === -1) return false;
+  const payload  = token.slice(0, lastDot);
+  const sig      = token.slice(lastDot + 1);
+  const expected = createHmac("sha256", JWT_SECRET).update(payload).digest("hex");
+  try {
+    return timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    return false;
+  }
+}
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.headers["x-admin-token"] as string | undefined;
-  if (!token || !sessions.has(token)) {
+  if (!token || !verifyToken(token)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -73,16 +93,15 @@ app.post("/api/admin/login", (req, res) => {
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: "Username and password required" }); return; }
   if (username === ADMIN_USER && password === ADMIN_PASS) {
-    const token = randomUUID();
-    sessions.add(token);
+    const token = signToken(`${randomUUID()}.${Date.now()}`);
     res.json({ token });
   } else {
     res.status(401).json({ error: "Invalid credentials" });
   }
 });
 
-app.post("/api/admin/logout", requireAuth, (req, res) => {
-  sessions.delete(req.headers["x-admin-token"] as string);
+app.post("/api/admin/logout", (_req, res) => {
+  // Stateless — client discards the token
   res.json({ ok: true });
 });
 
@@ -98,6 +117,41 @@ app.use("/api/admin/update", requireAuth, adminUpdateRouter);
 app.use("/api/chatbot", chatbotRouter);
 app.use("/api/tickets", ticketsRouter);
 app.use("/api/sentiment", sentimentRouter);
+app.use("/api/lost-found", lostFoundRouter);
+app.use("/api/safety", safetyRouter);
+
+// Admin-only: read safety incidents
+app.get("/api/admin/safety", requireAuth, async (_req, res) => {
+  if (!isSupabaseConfigured()) { res.json([]); return; }
+  const { data, error } = await supabase
+    .from("safety_incidents")
+    .select("id, type, station, details, status, created_at")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Safety fetch error:", error.message);
+    res.status(500).json({ error: "Failed to fetch safety incidents" });
+    return;
+  }
+  res.json(data ?? []);
+});
+
+app.patch("/api/admin/safety/:id", requireAuth, async (req, res) => {
+  if (!isSupabaseConfigured()) { res.status(503).json({ error: "Database not configured" }); return; }
+  const { status } = req.body as { status: string };
+  if (!status) { res.status(400).json({ error: "status is required" }); return; }
+  const { data, error } = await supabase
+    .from("safety_incidents")
+    .update({ status })
+    .eq("id", req.params.id)
+    .select("id, type, station, details, status, created_at")
+    .single();
+  if (error) {
+    console.error("Safety update error:", error.message);
+    res.status(500).json({ error: "Failed to update incident" });
+    return;
+  }
+  res.json(data);
+});
 
 // ── Admin: Schedules CRUD ─────────────────────────────────────────────────────
 app.post("/api/admin/schedules", requireAuth, (req, res) => {

@@ -57,6 +57,32 @@ The existing email alert system remains untouched:
 - Line filtering (show/hide specific lines)
 - Responsive layout with detail sidebar
 
+#### How the Map Was Implemented
+
+**Library:** [Leaflet](https://leafletjs.com) via `react-leaflet` — a lightweight, open-source mapping library with no API key required.
+
+**Tile layer:** Free [OpenStreetMap](https://openstreetmap.org) tiles (`https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`).
+
+**Station coordinates:** Every station has a hardcoded real-world GPS coordinate (`[latitude, longitude]`) defined in `STATION_COORDS` inside `src/routes/map.tsx`. These were sourced from the actual Cape Town Metrorail network geography.
+
+**Route lines:** Each Metrorail line (Southern, Northern, Central, Cape Flats) is defined as an ordered array of station names in `LINE_PATHS`. Leaflet `polyline` draws a line through the GPS coordinates of those stations in sequence, colour-coded per line:
+
+| Line | Colour |
+|------|--------|
+| Southern Line | Red `#d9534f` |
+| Northern Line | Blue `#2c5f9e` |
+| Central Line | Green `#3a9e5f` |
+| Cape Flats Line | Amber `#e6a817` |
+
+**Station markers:** Each station is rendered as a Leaflet `circleMarker`. Hub stations (served by 2+ lines) are drawn larger (radius 8) than single-line stations (radius 5). The selected station turns red.
+
+**Interactivity:**
+- Clicking a marker sets `selected` state → the sidebar panel shows station name, lines, GPS coordinates, and action buttons.
+- The line legend buttons call `poly.setStyle({ opacity })` on each polyline to dim/highlight lines without re-rendering.
+- Leaflet is imported dynamically (`import("leaflet")`) inside a `useEffect` to avoid SSR issues with Vite.
+
+**Cleanup:** The map instance is stored in a `useRef` and destroyed on component unmount via `map.remove()` to prevent memory leaks.
+
 **Files:**
 - `src/routes/map.tsx` — Full Leaflet integration with real coordinates
 - `package.json` — Added `leaflet`, `@types/leaflet`, `react-leaflet`

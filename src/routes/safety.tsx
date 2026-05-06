@@ -4,7 +4,8 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
 import { STATIONS } from "@/data/prasa";
-import { ShieldAlert, Phone, AlertTriangle, CheckCircle2, Siren, HeartPulse, Flame } from "lucide-react";
+import { api } from "@/lib/api";
+import { ShieldAlert, Phone, AlertTriangle, CheckCircle2, Siren, HeartPulse, Flame, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/safety")({
   head: () => ({
@@ -16,6 +17,14 @@ export const Route = createFileRoute("/safety")({
   component: SafetyPage,
 });
 
+const INCIDENT_TYPES = [
+  "Suspicious activity",
+  "Theft / robbery",
+  "Damage / vandalism",
+  "Medical assistance",
+  "Other",
+] as const;
+
 const TIPS = [
   "Avoid travelling with valuables on display — keep phones and laptops in a closed bag.",
   "Stay close to the station controller and well-lit areas while waiting.",
@@ -24,17 +33,28 @@ const TIPS = [
 ];
 
 function SafetyPage() {
-  const [type, setType] = useState("Suspicious activity");
+  const [type, setType] = useState<string>(INCIDENT_TYPES[0]);
   const [station, setStation] = useState(STATIONS[0]);
   const [details, setDetails] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!details.trim()) return;
-    setSent(true);
-    setDetails("");
-    setTimeout(() => setSent(false), 3500);
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.reportSafetyIncident({ type, station, details });
+      setSent(true);
+      setDetails("");
+      setTimeout(() => setSent(false), 3500);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to submit. Make sure the server is running.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -53,30 +73,10 @@ function SafetyPage() {
       <section className="container mx-auto grid flex-1 gap-6 px-4 py-8 lg:grid-cols-3">
         {/* Quick contacts */}
         <div className="space-y-3 lg:col-span-1">
-          <SOSCard
-            icon={<Siren className="h-5 w-5" />}
-            label="PRASA Protection Services"
-            number="0800 65 64 63"
-            tone="bg-destructive text-destructive-foreground"
-          />
-          <SOSCard
-            icon={<Phone className="h-5 w-5" />}
-            label="SAPS Emergency"
-            number="10111"
-            tone="bg-primary text-primary-foreground"
-          />
-          <SOSCard
-            icon={<HeartPulse className="h-5 w-5" />}
-            label="Medical Emergency"
-            number="10177"
-            tone="bg-success text-primary-foreground"
-          />
-          <SOSCard
-            icon={<Flame className="h-5 w-5" />}
-            label="Fire Brigade"
-            number="107"
-            tone="bg-warning text-foreground"
-          />
+          <SOSCard icon={<Siren className="h-5 w-5" />} label="PRASA Protection Services" number="0800 65 64 63" tone="bg-destructive text-destructive-foreground" />
+          <SOSCard icon={<Phone className="h-5 w-5" />} label="SAPS Emergency" number="10111" tone="bg-primary text-primary-foreground" />
+          <SOSCard icon={<HeartPulse className="h-5 w-5" />} label="Medical Emergency" number="10177" tone="bg-success text-primary-foreground" />
+          <SOSCard icon={<Flame className="h-5 w-5" />} label="Fire Brigade" number="107" tone="bg-warning text-foreground" />
         </div>
 
         {/* Report form */}
@@ -87,6 +87,7 @@ function SafetyPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             For life-threatening emergencies, call the numbers on the left. Use this form for non-urgent reports.
           </p>
+
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Field label="Type">
               <select
@@ -94,9 +95,7 @@ function SafetyPage() {
                 onChange={(e) => setType(e.target.value)}
                 className="w-full rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               >
-                {["Suspicious activity", "Theft / robbery", "Damage / vandalism", "Medical assistance", "Other"].map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
+                {INCIDENT_TYPES.map((o) => <option key={o}>{o}</option>)}
               </select>
             </Field>
             <Field label="Station / location">
@@ -109,28 +108,37 @@ function SafetyPage() {
               </select>
             </Field>
           </div>
+
           <Field label="Details" className="mt-3">
             <textarea
               value={details}
               maxLength={500}
+              required
               onChange={(e) => setDetails(e.target.value)}
               placeholder="Describe what happened, time, train number if known…"
               className="min-h-[120px] w-full rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
           </Field>
+
           <div className="mt-3 flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">{details.length}/500 characters</span>
             <button
               type="submit"
-              className="rounded-sm bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground hover:opacity-90"
+              disabled={submitting}
+              className="flex items-center gap-2 rounded-sm bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-50"
             >
-              Send report
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {submitting ? "Sending…" : "Send report"}
             </button>
           </div>
+
           {sent && (
             <div className="mt-3 flex items-center gap-2 rounded-sm border border-success/40 bg-success/10 p-3 text-sm text-success">
-              <CheckCircle2 className="h-4 w-4" /> Report received. A protection officer will follow up.
+              <CheckCircle2 className="h-4 w-4" /> Report received and saved. A protection officer will follow up.
             </div>
+          )}
+          {error && (
+            <p className="mt-3 rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
           )}
 
           <div className="mt-6 border-t border-border pt-4">

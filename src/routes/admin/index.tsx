@@ -7,14 +7,14 @@ import { STATIONS } from "@/data/prasa";
 import {
   Train, AlertTriangle, Newspaper, LayoutDashboard,
   LogOut, Plus, Pencil, Trash2, Check, X, RefreshCw,
-  Users, Send, Bell,
+  Users, Send, Bell, ShieldAlert,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
 });
 
-type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update";
+type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety";
 
 type Stats = {
   totalSchedules: number; onTime: number; delayed: number;
@@ -24,6 +24,7 @@ type Stats = {
 
 type Subscriber = { id: string; email: string; station: string; created_at: string };
 type TrainUpdateRecord = { id: string; train_no: string; line: string; station: string; status: string; delay_min: number; reason: string; updated_at: string };
+type SafetyIncident = { id: string; type: string; station: string; details: string; status: string; created_at: string };
 
 function useAdminGuard() {
   const navigate = useNavigate();
@@ -42,6 +43,7 @@ function AdminDashboard() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [updates, setUpdates] = useState<TrainUpdateRecord[]>([]);
+  const [safetyIncidents, setSafetyIncidents] = useState<SafetyIncident[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -52,6 +54,7 @@ function AdminDashboard() {
       // Load subscribers and updates in background — don't block if Supabase not configured
       api.subscribers().then(setSubscribers).catch(() => {});
       api.recentUpdates().then(setUpdates).catch(() => {});
+      api.adminSafetyIncidents().then(setSafetyIncidents).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -82,6 +85,13 @@ function AdminDashboard() {
           <NavItem icon={<Newspaper className="h-4 w-4" />} label="News" active={tab === "news"} onClick={() => setTab("news")} />
           <NavItem icon={<Bell className="h-4 w-4" />} label="Train Update" active={tab === "update"} onClick={() => setTab("update")} />
           <NavItem icon={<Users className="h-4 w-4" />} label="Subscribers" active={tab === "subscribers"} onClick={() => setTab("subscribers")} />
+          <NavItemBadge
+            icon={<ShieldAlert className="h-4 w-4" />}
+            label="Safety Reports"
+            active={tab === "safety"}
+            onClick={() => setTab("safety")}
+            count={safetyIncidents.filter((i) => i.status === "pending").length}
+          />
         </nav>
         <div className="border-t border-border p-3 space-y-1">
           <Link to="/" className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary">
@@ -109,6 +119,7 @@ function AdminDashboard() {
           {tab === "news" && <NewsTab news={news} onRefresh={refresh} />}
           {tab === "update" && <TrainUpdateTab updates={updates} onRefresh={refresh} />}
           {tab === "subscribers" && <SubscribersTab subscribers={subscribers} />}
+          {tab === "safety" && <SafetyTab incidents={safetyIncidents} onRefresh={refresh} />}
         </main>
       </div>
     </div>
@@ -452,6 +463,19 @@ function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode; labe
   );
 }
 
+function NavItemBadge({ icon, label, active, onClick, count }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; count: number }) {
+  return (
+    <button onClick={onClick} className={`flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-sm font-medium transition-colors ${active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}>
+      <span className="flex items-center gap-2">{icon} {label}</span>
+      {count > 0 && (
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="rounded-md border border-border bg-card p-4">
@@ -636,6 +660,132 @@ function SubscribersTab({ subscribers }: { subscribers: Subscriber[] }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Safety Tab ────────────────────────────────────────────────────────────────────────────
+const TYPE_COLOR: Record<string, string> = {
+  "Suspicious activity": "bg-warning/20 text-foreground border-warning/40",
+  "Theft / robbery":     "bg-destructive/15 text-destructive border-destructive/30",
+  "Damage / vandalism":  "bg-destructive/15 text-destructive border-destructive/30",
+  "Medical assistance":  "bg-primary/15 text-primary border-primary/30",
+  "Other":               "bg-secondary text-muted-foreground border-border",
+};
+
+function SafetyTab({ incidents, onRefresh }: { incidents: SafetyIncident[]; onRefresh: () => void }) {
+  const [updating, setUpdating] = useState<string | null>(null);
+  const pending = incidents.filter((i) => i.status === "pending");
+
+  async function updateStatus(id: string, status: string) {
+    setUpdating(id);
+    try { await api.updateSafetyStatus(id, status); onRefresh(); }
+    finally { setUpdating(null); }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Total Reports"   value={incidents.length}                                    color="bg-primary" />
+        <StatCard label="Pending"         value={pending.length}                                      color="bg-destructive" />
+        <StatCard label="Resolved"        value={incidents.filter((i) => i.status === "resolved").length} color="bg-success" />
+      </div>
+
+      {/* Pending banner */}
+      {pending.length > 0 && (
+        <div className="rounded-md border border-destructive/30 bg-card">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <ShieldAlert className="h-4 w-4 text-destructive" />
+            <span className="font-semibold text-foreground">Pending — requires action</span>
+            <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+              {pending.length}
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {pending.map((inc) => (
+              <div key={inc.id} className="flex items-start gap-3 px-4 py-4">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${TYPE_COLOR[inc.type] ?? ""}` }>
+                      {inc.type}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{inc.station}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(inc.created_at).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-foreground">{inc.details}</p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "in_progress")}
+                    className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50">
+                    In progress
+                  </button>
+                  <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "resolved")}
+                    className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50">
+                    Resolve
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All incidents table */}
+      <div className="rounded-md border border-border bg-card">
+        <div className="border-b border-border px-4 py-3 font-semibold text-foreground">All reports</div>
+        {incidents.length === 0 ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">No safety reports yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+                <tr><Th>Type</Th><Th>Station</Th><Th>Details</Th><Th>Status</Th><Th>Reported</Th><Th /></tr>
+              </thead>
+              <tbody>
+                {incidents.map((inc) => (
+                  <tr key={inc.id} className="border-t border-border hover:bg-secondary/30">
+                    <Td>
+                      <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${TYPE_COLOR[inc.type] ?? "bg-secondary border-border text-foreground"}`}>
+                        {inc.type}
+                      </span>
+                    </Td>
+                    <Td>{inc.station}</Td>
+                    <Td><span className="line-clamp-2 block max-w-xs text-muted-foreground">{inc.details}</span></Td>
+                    <Td>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        inc.status === "resolved"    ? "bg-success/15 text-success" :
+                        inc.status === "in_progress" ? "bg-warning/20 text-foreground" :
+                        "bg-destructive/15 text-destructive"
+                      }`}>{inc.status}</span>
+                    </Td>
+                    <Td>{new Date(inc.created_at).toLocaleString("en-ZA", { dateStyle: "short", timeStyle: "short" })}</Td>
+                    <Td>
+                      <div className="flex gap-1">
+                        {inc.status !== "in_progress" && inc.status !== "resolved" && (
+                          <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "in_progress")}
+                            className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50">
+                            In progress
+                          </button>
+                        )}
+                        {inc.status !== "resolved" && (
+                          <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "resolved")}
+                            className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50">
+                            Resolve
+                          </button>
+                        )}
+                      </div>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

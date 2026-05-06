@@ -4,17 +4,15 @@ import { useState } from "react";
 
 const PRIMARY = [
   { to: "/", label: "Home" },
-  { to: "/search", label: "Plan a Trip" },
-  { to: "/planner", label: "Trip Planner" },
+  { to: "/crowding", label: "Crowding Predictor" },
+  { to: "/map", label: "Network Map" },
   { to: "/tracking", label: "Live Trains" },
   { to: "/register", label: "Get Alerts" },
+  
 ] as const;
 
 const MORE = [
-  { to: "/map", label: "Network Map" },
   { to: "/fares", label: "Fares & Tickets" },
-  { to: "/crowding", label: "Crowding Predictor" },
-  { to: "/alerts", label: "Service Alerts" },
   { to: "/news", label: "News" },
   { to: "/tickets", label: "My Tickets" },
   { to: "/safety", label: "Safety & SOS" },

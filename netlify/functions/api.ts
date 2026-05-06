@@ -2,7 +2,7 @@ import serverless from "serverless-http";
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import { randomUUID } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { supabase } from "../../server/db";
 
 const isSupabaseConfigured =
@@ -11,10 +11,14 @@ const isSupabaseConfigured =
   !!process.env.SUPABASE_SERVICE_KEY &&
   !process.env.SUPABASE_SERVICE_KEY.includes("REPLACE");
 
-import registerRouter from "../../server/routes/register";
-import subscribeRouter from "../../server/routes/subscribe";
+import registerRouter   from "../../server/routes/register";
+import subscribeRouter  from "../../server/routes/subscribe";
 import adminUpdateRouter from "../../server/routes/adminUpdate";
-import chatbotRouter from "../../server/routes/chatbot";
+import chatbotRouter    from "../../server/routes/chatbot";
+import ticketsRouter    from "../../server/routes/tickets";
+import sentimentRouter  from "../../server/routes/sentiment";
+import lostFoundRouter  from "../../server/routes/lostFound";
+import safetyRouter     from "../../server/routes/safety";
 
 import type { TrainSchedule, ServiceAlert } from "../../src/data/prasa";
 import type { NewsItem } from "../../src/data/extras";
@@ -32,8 +36,8 @@ let schedules: TrainSchedule[] = [
 
 let alerts: ServiceAlert[] = [
   { id: "a1", level: "critical", title: "Northern Line: Train 1206 cancelled", message: "The 17:15 from Cape Town to Bellville is cancelled due to signal failure. Next service at 17:45.", line: "Northern Line", postedAt: "2025-04-24T14:10:00Z" },
-  { id: "a2", level: "warning", title: "Central Line delays of up to 20 minutes", message: "Cable theft between Langa and Nyanga is causing delays. Maintenance teams on site.", line: "Central Line", postedAt: "2025-04-24T12:30:00Z" },
-  { id: "a3", level: "info", title: "Southern Line weekend works", message: "Engineering work between Muizenberg and Fish Hoek this Sunday from 06:00 to 14:00. Bus shuttles in operation.", line: "Southern Line", postedAt: "2025-04-23T09:00:00Z" },
+  { id: "a2", level: "warning",  title: "Central Line delays of up to 20 minutes", message: "Cable theft between Langa and Nyanga is causing delays. Maintenance teams on site.", line: "Central Line", postedAt: "2025-04-24T12:30:00Z" },
+  { id: "a3", level: "info",     title: "Southern Line weekend works", message: "Engineering work between Muizenberg and Fish Hoek this Sunday from 06:00 to 14:00. Bus shuttles in operation.", line: "Southern Line", postedAt: "2025-04-23T09:00:00Z" },
 ];
 
 let news: NewsItem[] = [
@@ -47,14 +51,36 @@ const app = express();
 app.use(cors({ origin: "*", credentials: false }));
 app.use(express.json());
 
-// ── Session auth ──────────────────────────────────────────────────────────────
+// ── JWT-style token auth (stateless — survives cold starts on Netlify) ─────────
 const ADMIN_USER = process.env.ADMIN_USER ?? "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS ?? "prasa2025";
-const sessions = new Set<string>();
+// Secret used to sign tokens — set ADMIN_JWT_SECRET in Netlify env vars
+const JWT_SECRET = process.env.ADMIN_JWT_SECRET ?? "prasa-secret-change-me";
+
+function signToken(payload: string): string {
+  const sig = createHmac("sha256", JWT_SECRET).update(payload).digest("hex");
+  return `${payload}.${sig}`;
+}
+
+function verifyToken(token: string): boolean {
+  const lastDot = token.lastIndexOf(".");
+  if (lastDot === -1) return false;
+  const payload = token.slice(0, lastDot);
+  const sig     = token.slice(lastDot + 1);
+  const expected = createHmac("sha256", JWT_SECRET).update(payload).digest("hex");
+  try {
+    return timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    return false;
+  }
+}
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.headers["x-admin-token"] as string | undefined;
-  if (!token || !sessions.has(token)) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!token || !verifyToken(token)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   next();
 }
 
@@ -63,29 +89,65 @@ app.post(["/api/admin/login", "/admin/login"], (req, res) => {
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: "Username and password required" }); return; }
   if (username === ADMIN_USER && password === ADMIN_PASS) {
-    const token = randomUUID();
-    sessions.add(token);
+    // Token payload: uuid + issued-at so each token is unique
+    const token = signToken(`${randomUUID()}.${Date.now()}`);
     res.json({ token });
   } else {
     res.status(401).json({ error: "Invalid credentials" });
   }
 });
 
-app.post(["/api/admin/logout", "/admin/logout"], requireAuth, (req, res) => {
-  sessions.delete(req.headers["x-admin-token"] as string);
+app.post(["/api/admin/logout", "/admin/logout"], (_req, res) => {
+  // Stateless — client just discards the token
   res.json({ ok: true });
 });
 
-// ── Public ────────────────────────────────────────────────────────────────────
+// ── Public data ───────────────────────────────────────────────────────────────
 app.get(["/api/schedules", "/schedules"], (_req, res) => res.json(schedules));
-app.get(["/api/alerts", "/alerts"], (_req, res) => res.json(alerts));
-app.get(["/api/news", "/news"], (_req, res) => res.json(news));
+app.get(["/api/alerts",   "/alerts"],    (_req, res) => res.json(alerts));
+app.get(["/api/news",     "/news"],      (_req, res) => res.json(news));
 
 // ── Modular routes ────────────────────────────────────────────────────────────
-app.use(["/api/register", "/register"], registerRouter);
-app.use(["/api/subscribe", "/subscribe"], subscribeRouter);
-app.use(["/api/admin/update", "/admin/update"], requireAuth, adminUpdateRouter);
-app.use(["/api/chatbot", "/chatbot"], chatbotRouter);
+app.use(["/api/register",      "/register"],      registerRouter);
+app.use(["/api/subscribe",     "/subscribe"],     subscribeRouter);
+app.use(["/api/admin/update",  "/admin/update"],  requireAuth, adminUpdateRouter);
+app.use(["/api/chatbot",       "/chatbot"],       chatbotRouter);
+app.use(["/api/tickets",       "/tickets"],       ticketsRouter);
+app.use(["/api/sentiment",     "/sentiment"],     sentimentRouter);
+app.use(["/api/lost-found",    "/lost-found"],    lostFoundRouter);
+app.use(["/api/safety",        "/safety"],        safetyRouter);
+
+// Admin-only: safety incidents
+app.get(["/api/admin/safety", "/admin/safety"], requireAuth, async (_req, res) => {
+  if (!isSupabaseConfigured) { res.json([]); return; }
+  const { data, error } = await supabase
+    .from("safety_incidents")
+    .select("id, type, station, details, status, created_at")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Safety fetch error:", error.message);
+    res.status(500).json({ error: "Failed to fetch safety incidents" });
+    return;
+  }
+  res.json(data ?? []);
+});
+app.patch(["/api/admin/safety/:id", "/admin/safety/:id"], requireAuth, async (req, res) => {
+  if (!isSupabaseConfigured) { res.status(503).json({ error: "Database not configured" }); return; }
+  const { status } = req.body as { status: string };
+  if (!status) { res.status(400).json({ error: "status is required" }); return; }
+  const { data, error } = await supabase
+    .from("safety_incidents")
+    .update({ status })
+    .eq("id", req.params.id)
+    .select("id, type, station, details, status, created_at")
+    .single();
+  if (error) {
+    console.error("Safety update error:", error.message);
+    res.status(500).json({ error: "Failed to update incident" });
+    return;
+  }
+  res.json(data);
+});
 
 // ── Admin: Schedules ──────────────────────────────────────────────────────────
 app.post(["/api/admin/schedules", "/admin/schedules"], requireAuth, (req, res) => {
@@ -142,7 +204,7 @@ app.get(["/api/health", "/health"], (_req, res) => {
     supabase: isSupabaseConfigured ? "connected" : "not configured",
     emailjs: !!process.env.EMAILJS_SERVICE_ID && !process.env.EMAILJS_SERVICE_ID.includes("REPLACE") ? "configured" : "not configured",
     serpapi: !!process.env.SERPAPI_KEY && !process.env.SERPAPI_KEY.includes("REPLACE") ? "configured" : "not configured",
-    openai: !!process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("REPLACE") ? "configured" : "not configured",
+    openai:  !!process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("REPLACE") ? "configured" : "not configured",
   });
 });
 
@@ -163,12 +225,12 @@ app.get(["/api/admin/stats", "/admin/stats"], requireAuth, async (_req, res) => 
   }
   res.json({
     totalSchedules: schedules.length,
-    onTime: schedules.filter((s) => s.status === "On Time").length,
-    delayed: schedules.filter((s) => s.status === "Delayed").length,
-    cancelled: schedules.filter((s) => s.status === "Cancelled").length,
-    totalAlerts: alerts.length,
+    onTime:         schedules.filter((s) => s.status === "On Time").length,
+    delayed:        schedules.filter((s) => s.status === "Delayed").length,
+    cancelled:      schedules.filter((s) => s.status === "Cancelled").length,
+    totalAlerts:    alerts.length,
     criticalAlerts: alerts.filter((a) => a.level === "critical").length,
-    totalNews: news.length,
+    totalNews:      news.length,
     totalSubscribers,
   });
 });
