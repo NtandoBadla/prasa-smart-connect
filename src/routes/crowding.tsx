@@ -25,6 +25,25 @@ function isPeak(time: string) {
   return (h >= 6 && h < 9) || (h >= 16 && h < 19);
 }
 
+const SAMPLE_REVIEWS = [
+  "The train was very crowded during peak hours, barely any space to stand",
+  "Security guards were present and I felt safe on the Southern Line",
+  "Delayed again, packed like sardines, terrible experience",
+  "Clean coaches today, on time and comfortable journey",
+  "Crime is a concern at some stations, need more police patrols",
+  "Smooth ride, friendly staff, good service overall",
+];
+
+type SentimentResult = {
+  crowdLevel: "Low" | "Medium" | "High";
+  safetyRating: "Safe" | "Moderate" | "Risky";
+  sentimentScore: number;
+  compound: number;
+  crowdScore: number;
+  huggingFace: { label: string; score: number } | null;
+  analyzedCount: number;
+};
+
 function CrowdingPage() {
   const [trainId, setTrainId] = useState(SCHEDULES[0].id);
   const [time, setTime] = useState(now24h);

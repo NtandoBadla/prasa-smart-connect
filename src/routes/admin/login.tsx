@@ -1,7 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { Train, Lock } from "lucide-react";
+import { Train, Lock, Home } from "lucide-react";
 
 export const Route = createFileRoute("/admin/login")({
   component: AdminLogin,
@@ -69,6 +69,13 @@ function AdminLogin() {
             <Lock className="h-4 w-4" />
             {loading ? "Signing in…" : "Sign in"}
           </button>
+
+          <Link
+            to="/"
+            className="flex w-full items-center justify-center gap-2 rounded-sm border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary"
+          >
+            <Home className="h-4 w-4" /> Back to home
+          </Link>
         </form>
       </div>
     </div>

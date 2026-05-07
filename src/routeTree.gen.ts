@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrackingRouteImport } from './routes/tracking'
+import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SafetyRouteImport } from './routes/safety'
@@ -29,6 +30,11 @@ import { Route as AdminLoginRouteImport } from './routes/admin/login'
 const TrackingRoute = TrackingRouteImport.update({
   id: '/tracking',
   path: '/tracking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TicketsRoute = TicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SearchRoute = SearchRouteImport.update({
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
+  '/tickets': typeof TicketsRoute
   '/tracking': typeof TrackingRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
+  '/tickets': typeof TicketsRoute
   '/tracking': typeof TrackingRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin': typeof AdminIndexRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
+  '/tickets': typeof TicketsRoute
   '/tracking': typeof TrackingRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/safety'
     | '/saved'
     | '/search'
+    | '/tickets'
     | '/tracking'
     | '/admin/login'
     | '/admin/'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/safety'
     | '/saved'
     | '/search'
+    | '/tickets'
     | '/tracking'
     | '/admin/login'
     | '/admin'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/safety'
     | '/saved'
     | '/search'
+    | '/tickets'
     | '/tracking'
     | '/admin/login'
     | '/admin/'
@@ -231,6 +243,7 @@ export interface RootRouteChildren {
   SafetyRoute: typeof SafetyRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
+  TicketsRoute: typeof TicketsRoute
   TrackingRoute: typeof TrackingRoute
 }
 
@@ -241,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/tracking'
       fullPath: '/tracking'
       preLoaderRoute: typeof TrackingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tickets': {
+      id: '/tickets'
+      path: '/tickets'
+      fullPath: '/tickets'
+      preLoaderRoute: typeof TicketsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/search': {
@@ -377,6 +397,7 @@ const rootRouteChildren: RootRouteChildren = {
   SafetyRoute: SafetyRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
+  TicketsRoute: TicketsRoute,
   TrackingRoute: TrackingRoute,
 }
 export const routeTree = rootRouteImport

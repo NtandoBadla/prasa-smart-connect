@@ -133,4 +133,108 @@ export const api = {
     apiFetch(`/admin/news/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteNews: (id: string) =>
     apiFetch(`/admin/news/${id}`, { method: "DELETE" }),
+
+  // ── Tickets ─────────────────────────────────────────────────────────────────
+  generateTicket: (data: {
+    userId?: string;
+    trainNo: string;
+    line: string;
+    from: string;
+    to: string;
+    departure: string;
+    arrival: string;
+    fare: number;
+    travelClass?: string;
+  }) => apiFetch<{
+    id: string;
+    ticket_ref: string;
+    train_no: string;
+    line: string;
+    from_station: string;
+    to_station: string;
+    departure: string;
+    arrival: string;
+    fare: number;
+    travel_class: string;
+    booked_at: string;
+  }>("/tickets", { method: "POST", body: JSON.stringify(data) }),
+
+  ticketHistory: (userId: string) =>
+    apiFetch<{
+      id: string;
+      ticket_ref: string;
+      train_no: string;
+      line: string;
+      from_station: string;
+      to_station: string;
+      departure: string;
+      arrival: string;
+      fare: number;
+      travel_class: string;
+      booked_at: string;
+    }[]>(`/tickets/${encodeURIComponent(userId)}`),
+
+  // ── Sentiment ────────────────────────────────────────────────────────────────
+  analyzeSentiment: (texts: string[]) =>
+    apiFetch<{
+      crowdLevel: "Low" | "Medium" | "High";
+      safetyRating: "Safe" | "Moderate" | "Risky";
+      sentimentScore: number;
+      compound: number;
+      crowdScore: number;
+      safetyScore: number;
+      huggingFace: { label: string; score: number } | null;
+      analyzedCount: number;
+    }>("/sentiment", { method: "POST", body: JSON.stringify({ texts }) }),
+
+  // ── Lost & Found ────────────────────────────────────────────────────────────
+  getLostFound: () =>
+    apiFetch<{
+      id: string;
+      item: string;
+      station: string;
+      date: string;
+      contact_ref: string;
+      status: "open" | "matched";
+      created_at: string;
+    }[]>("/lost-found"),
+
+  reportLostFound: (data: { item: string; station: string; date: string; contact: string }) =>
+    apiFetch<{
+      id: string;
+      item: string;
+      station: string;
+      date: string;
+      contact_ref: string;
+      status: "open" | "matched";
+      created_at: string;
+    }>("/lost-found", { method: "POST", body: JSON.stringify(data) }),
+
+  // ── Safety Incidents ────────────────────────────────────────────────────────
+  reportSafetyIncident: (data: { type: string; station: string; details: string }) =>
+    apiFetch<{
+      id: string;
+      type: string;
+      station: string;
+      details: string;
+      status: string;
+      created_at: string;
+    }>("/safety", { method: "POST", body: JSON.stringify(data) }),
+
+  // ── Admin: Safety incidents ─────────────────────────────────────────────────────
+  adminSafetyIncidents: () =>
+    apiFetch<{
+      id: string;
+      type: string;
+      station: string;
+      details: string;
+      status: string;
+      created_at: string;
+    }[]>("/admin/safety"),
+
+  updateSafetyStatus: (id: string, status: string) =>
+    apiFetch<{ id: string; status: string }>(`/admin/safety/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 };

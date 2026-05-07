@@ -11,7 +11,7 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["server/**/*", "src/data/**/*", "netlify/**/*"],
+  "include": ["server/**/*", "scripts/**/*", "src/data/**/*", "netlify/**/*"],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }

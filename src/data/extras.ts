@@ -56,9 +56,15 @@ function trainServes(t: TrainSchedule, from: string, to: string) {
 
 export function planTrip(from: string, to: string, afterTime?: string): TripPlan[] {
   const after = afterTime ? timeToMin(afterTime) : 0;
-  const direct: TripPlan[] = SCHEDULES.filter(
-    (t) => trainServes(t, from, to) && timeToMin(t.departure) >= after && t.status !== "Cancelled",
-  ).map((t) => ({
+
+  const directAll = SCHEDULES.filter(
+    (t) => trainServes(t, from, to) && t.status !== "Cancelled",
+  );
+  const directFiltered = directAll.filter((t) => timeToMin(t.departure) >= after);
+  // If no trains after requested time, fall back to all trains on the route
+  const directPool = directFiltered.length > 0 ? directFiltered : directAll;
+
+  const direct: TripPlan[] = directPool.map((t) => ({
     legs: [{ train: t }],
     transfers: 0,
     totalDuration: t.durationMin,
@@ -70,10 +76,13 @@ export function planTrip(from: string, to: string, afterTime?: string): TripPlan
   const transfers: TripPlan[] = [];
   for (const hub of HUBS) {
     if (hub.toLowerCase() === from.toLowerCase() || hub.toLowerCase() === to.toLowerCase()) continue;
-    const firstLegs = SCHEDULES.filter(
-      (t) => trainServes(t, from, hub) && timeToMin(t.departure) >= after && t.status !== "Cancelled",
+    const firstLegsAll = SCHEDULES.filter(
+      (t) => trainServes(t, from, hub) && t.status !== "Cancelled",
     );
-    for (const leg1 of firstLegs) {
+    const firstLegs = firstLegsAll.filter((t) => timeToMin(t.departure) >= after);
+    const firstPool = firstLegs.length > 0 ? firstLegs : firstLegsAll;
+
+    for (const leg1 of firstPool) {
       const arriveHub = timeToMin(leg1.arrival);
       const secondLegs = SCHEDULES.filter(
         (t) =>
