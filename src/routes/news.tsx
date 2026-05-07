@@ -119,7 +119,7 @@ function NewsPage() {
                   rel="noopener noreferrer"
                   className="mt-3 inline-block text-sm font-semibold text-primary hover:underline"
                 >
-                  Read more on PRASA.com →
+                  Read more →
                 </a>
               </article>
             ))}
