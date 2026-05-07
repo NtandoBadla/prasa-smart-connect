@@ -7,14 +7,14 @@ import { STATIONS } from "@/data/prasa";
 import {
   Train, AlertTriangle, Newspaper, LayoutDashboard,
   LogOut, Plus, Pencil, Trash2, Check, X, RefreshCw,
-  Users, Send, Bell, ShieldAlert,
+  Users, Send, Bell, ShieldAlert, CalendarClock,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
 });
 
-type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety";
+type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety" | "timetable";
 
 type Stats = {
   totalSchedules: number; onTime: number; delayed: number;
@@ -44,6 +44,7 @@ function AdminDashboard() {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [updates, setUpdates] = useState<TrainUpdateRecord[]>([]);
   const [safetyIncidents, setSafetyIncidents] = useState<SafetyIncident[]>([]);
+  const [timetableEntries, setTimetableEntries] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -55,6 +56,7 @@ function AdminDashboard() {
       api.subscribers().then(setSubscribers).catch(() => {});
       api.recentUpdates().then(setUpdates).catch(() => {});
       api.adminSafetyIncidents().then(setSafetyIncidents).catch(() => {});
+      api.timetable().then(setTimetableEntries).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -92,6 +94,7 @@ function AdminDashboard() {
             onClick={() => setTab("safety")}
             count={safetyIncidents.filter((i) => i.status === "pending").length}
           />
+          <NavItem icon={<CalendarClock className="h-4 w-4" />} label="Timetable" active={tab === "timetable"} onClick={() => setTab("timetable")} />
         </nav>
         <div className="border-t border-border p-3 space-y-1">
           <Link to="/" className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary">
@@ -120,6 +123,7 @@ function AdminDashboard() {
           {tab === "update" && <TrainUpdateTab updates={updates} onRefresh={refresh} />}
           {tab === "subscribers" && <SubscribersTab subscribers={subscribers} />}
           {tab === "safety" && <SafetyTab incidents={safetyIncidents} onRefresh={refresh} />}
+          {tab === "timetable" && <TimetableTab entries={timetableEntries} onRefresh={refresh} />}
         </main>
       </div>
     </div>
@@ -786,6 +790,111 @@ function SafetyTab({ incidents, onRefresh }: { incidents: SafetyIncident[]; onRe
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Timetable Tab — admin adds upcoming trains to DB ─────────────────────────
+const BLANK_TIMETABLE = {
+  train_no: "", line: "Southern Line", from_station: "", to_station: "",
+  departure: "", arrival: "", platform: "", status: "On Time", fare: "",
+};
+
+function TimetableTab({ entries, onRefresh }: { entries: Record<string, unknown>[]; onRefresh: () => void }) {
+  const [form, setForm] = useState({ ...BLANK_TIMETABLE });
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true); setError(""); setSuccess(false);
+    try {
+      await api.addTimetableEntry({ ...form, fare: Number(form.fare) });
+      setSuccess(true);
+      setForm({ ...BLANK_TIMETABLE });
+      onRefresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-md border border-border bg-card p-5">
+        <h2 className="mb-1 font-semibold text-foreground">Add upcoming train to timetable</h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Entries added here are stored in the database and surfaced in the Trip Planner timetable view.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Train No" value={form.train_no} onChange={(v) => set("train_no", v)} />
+            <Field label="From Station" value={form.from_station} onChange={(v) => set("from_station", v)} />
+            <Field label="To Station" value={form.to_station} onChange={(v) => set("to_station", v)} />
+            <Field label="Departure (HH:mm)" value={form.departure} onChange={(v) => set("departure", v)} />
+            <Field label="Arrival (HH:mm)" value={form.arrival} onChange={(v) => set("arrival", v)} />
+            <Field label="Platform" value={form.platform} onChange={(v) => set("platform", v)} />
+            <Field label="Fare (ZAR)" type="number" value={form.fare} onChange={(v) => set("fare", v)} />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Line</label>
+              <select value={form.line} onChange={(e) => set("line", e.target.value)} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground">
+                {["Southern Line","Northern Line","Central Line","Cape Flats Line"].map((l) => <option key={l}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
+              <select value={form.status} onChange={(e) => set("status", e.target.value)} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground">
+                {["On Time","Delayed","Cancelled"].map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {success && <p className="rounded-sm bg-success/10 p-2 text-sm text-success">Timetable entry saved to database.</p>}
+          <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60">
+            <Plus className="h-4 w-4" />
+            {saving ? "Saving…" : "Add to timetable"}
+          </button>
+        </form>
+      </div>
+
+      {entries.length > 0 && (
+        <div className="rounded-md border border-border bg-card overflow-x-auto">
+          <div className="border-b border-border px-4 py-3 font-semibold text-foreground">
+            Stored timetable entries ({entries.length})
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+              <tr>
+                <Th>Train</Th><Th>Line</Th><Th>Route</Th><Th>Departs</Th><Th>Arrives</Th><Th>Platform</Th><Th>Status</Th><Th>Fare</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => (
+                <tr key={String(e.id ?? i)} className="border-t border-border hover:bg-secondary/30">
+                  <Td>#{String(e.train_no ?? "")}</Td>
+                  <Td>{String(e.line ?? "")}</Td>
+                  <Td>{String(e.from_station ?? "")} → {String(e.to_station ?? "")}</Td>
+                  <Td>{String(e.departure ?? "")}</Td>
+                  <Td>{String(e.arrival ?? "")}</Td>
+                  <Td>{String(e.platform ?? "")}</Td>
+                  <Td><StatusBadge status={String(e.status ?? "On Time")} /></Td>
+                  <Td>R {Number(e.fare ?? 0).toFixed(2)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {entries.length === 0 && (
+        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          No timetable entries in the database yet. Use the form above to add upcoming trains.
+        </p>
+      )}
     </div>
   );
 }

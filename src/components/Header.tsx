@@ -7,6 +7,7 @@ const PRIMARY = [
   { to: "/crowding", label: "Crowding Predictor" },
   { to: "/map", label: "Network Map" },
   { to: "/tracking", label: "Live Trains" },
+  { to: "/planner", label: "Plan Trip" },
   { to: "/register", label: "Get Alerts" },
   
 ] as const;

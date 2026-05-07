@@ -174,6 +174,12 @@ export const api = {
       booked_at: string;
     }[]>(`/tickets/${encodeURIComponent(userId)}`),
 
+  timetable: () =>
+    apiFetch<Record<string, unknown>[]>("/tickets/timetable"),
+
+  addTimetableEntry: (data: object) =>
+    apiFetch<Record<string, unknown>>("/tickets/timetable", { method: "POST", body: JSON.stringify(data) }),
+
   // ── Sentiment ────────────────────────────────────────────────────────────────
   analyzeSentiment: (texts: string[]) =>
     apiFetch<{

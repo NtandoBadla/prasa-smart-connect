@@ -49,9 +49,7 @@ function CrowdingPage() {
   const [time, setTime] = useState(now24h);
   const [feedback, setFeedback] = useState('');
   const [selectedCoach, setSelectedCoach] = useState(1);
-const [resultsByContext, setResultsByContext] = useState<
-  Record<string, any[]>
->({});
+  const [resultsByContext, setResultsByContext] = useState<Record<string, any[]>>({});
   const train = SCHEDULES.find((s) => s.id === trainId)!;
   const contextKey = `${trainId}-${time}`;
 
@@ -217,7 +215,7 @@ const coachSentiment = useMemo(() => {
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Train</label>
             <select
               value={trainId}
-              onChange={(e) => setTrainId(e.target.value)}
+              onChange={(e) => { setTrainId(e.target.value); setSelectedCoach(1); setResultsByContext({}); }}
               className="rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             >
               {SCHEDULES.map((s) => (
@@ -234,7 +232,7 @@ const coachSentiment = useMemo(() => {
             <input
               type="time"
               value={time}
-              onChange={(e) => setTime(e.target.value)}
+              onChange={(e) => { setTime(e.target.value); setResultsByContext({}); }}
               className="rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
           </div>
@@ -292,7 +290,7 @@ const coachSentiment = useMemo(() => {
                     </div>
                     </div>
                   )}
-                  {isBest && <div className="mt-1 text-[9px] font-bold uppercase tracking-widest">Best</div>}
+                  {isBest && <div className="mt-1 text-[9px] font-bold uppercase tracking-widest"></div>}
                 </div>
               );
             })}

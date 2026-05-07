@@ -51,6 +51,32 @@ router.post("/", async (req, res) => {
   res.status(201).json(ticket);
 });
 
+// GET /api/tickets/timetable — full timetable for admin storage
+router.get("/timetable", async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("timetable")
+      .select("*")
+      .order("departure", { ascending: true });
+    if (error) { res.json([]); return; }
+    res.json(data ?? []);
+  } catch {
+    res.json([]);
+  }
+});
+
+// POST /api/tickets/timetable — admin adds a timetable entry
+router.post("/timetable", async (req, res) => {
+  const entry = { ...req.body, id: randomUUID(), created_at: new Date().toISOString() };
+  try {
+    const { error } = await supabase.from("timetable").insert(entry);
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.status(201).json(entry);
+  } catch {
+    res.status(500).json({ error: "DB unavailable" });
+  }
+});
+
 // GET /api/tickets/:userId — fetch ticket history for a user
 router.get("/:userId", async (req, res) => {
   const { userId } = req.params;
