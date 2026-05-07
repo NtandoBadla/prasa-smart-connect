@@ -7,6 +7,7 @@ import { Chatbot } from "@/components/Chatbot";
 import { RouteSearchForm } from "@/components/RouteSearchForm";
 import { ALERTS, SCHEDULES } from "@/data/prasa";
 import { Train, Sparkles, ShieldCheck, MapPin, Clock, ArrowRight, AlertTriangle, Info, AlertCircle } from "lucide-react";
+import { analyzeWithVader } from "@/lib/vader";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -147,6 +148,8 @@ function HomePage() {
     </div>
   );
 }
+
+
 
 function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (

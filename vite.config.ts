@@ -21,6 +21,12 @@ export default defineConfig({
     port: 8080,
     proxy: {
       "/api": "http://localhost:3001",
+
+      "/hf-api": {
+        target: "https://router.huggingface.co",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/hf-api/, "/hf-inference/models"),
+      },
     },
   },
 });
