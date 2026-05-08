@@ -57,6 +57,7 @@ function buildPrompt(trains: any[], notices: any[], adminUpdates: any[]): string
   return `You are a helpful PRASA Metrorail assistant for Cape Town, South Africa.
 Answer ONLY using the live data provided below. Do not invent train numbers, times or statuses.
 If the data does not contain enough information to answer, say so honestly and suggest the user check cttrains.co.za.
+When presenting train or notice data, ALWAYS format it as a markdown table.
 Be concise and friendly. Available stations: ${STATIONS.join(", ")}.
 
 === LIVE TRAINS (scraped from cttrains.co.za) ===
@@ -218,10 +219,12 @@ function buildLiveReply(
 
   if (adminUpdates.length > 0) {
     reply += `**Admin updates${context}:**\n`;
+    reply += `| Train | Station | Line | Status | Delay | Reason |\n`;
+    reply += `|-------|---------|------|--------|-------|--------|\n`;
     reply += adminUpdates
       .slice(0, 5)
       .map((u: any) =>
-        `• Train #${u.train_no} at **${u.station}** (${u.line}) — **${u.status}**${u.delay_min ? ` +${u.delay_min}min` : ""}${u.reason ? `\n  _${u.reason}_` : ""}`
+        `| ${u.train_no} | ${u.station} | ${u.line} | ${u.status} | ${u.delay_min ? `+${u.delay_min}min` : "—"} | ${u.reason ?? "—"} |`
       )
       .join("\n");
     reply += "\n\n";
@@ -229,20 +232,27 @@ function buildLiveReply(
 
   if (notices.length > 0) {
     reply += `**Live notices${context}:**\n`;
+    reply += `| Line | Notice |\n`;
+    reply += `|------|--------|\n`;
     reply += notices
       .slice(0, 5)
-      .map((n: any) => `• [**${n.line}**] ${n.body ?? n.title}`)
+      .map((n: any) => `| ${n.line} | ${(n.body ?? n.title).replace(/\|/g, "-")} |`)
       .join("\n");
     reply += "\n\n";
   }
 
   if (trains.length > 0) {
     reply += `**Live train updates${context}:**\n`;
+    reply += `| Train | From | To | Departure | Line | Status | Delay | Reason |\n`;
+    reply += `|-------|------|----|-----------|------|--------|-------|--------|\n`;
     reply += trains
       .slice(0, 8)
-      .map((t: any) =>
-        `• **${t.train_no}** | ${t.from_station} → ${t.to_station} | ${t.departure || "—"} | [${t.line}] | **${t.status}**${t.delay_min ? ` +${t.delay_min}min` : ""}${t.reason ? `\n  _${t.reason}_` : ""}`
-      )
+      .map((t: any) => {
+        const fromCol = (t.from_station === "Unknown" || !t.from_station)
+          ? (from ?? line?.replace(" Line", "") ?? "—")
+          : t.from_station;
+        return `| ${t.train_no} | ${fromCol} | ${t.to_station} | ${t.departure || "—"} | ${t.line} | ${t.status} | ${t.delay_min ? `+${t.delay_min}min` : "—"} | ${(t.reason || "—").replace(/\|/g, "-")} |`;
+      })
       .join("\n");
   }
 

@@ -47,7 +47,7 @@ function parseDelay(text: string): number {
   return m ? parseInt(m[1]) : 0;
 }
 
-// ── Scrape status2.php ────────────────────────────────────────────────────────
+
 async function scrapeStatus(): Promise<{ trains: ScrapedTrain[]; notices: ScrapedNotice[] }> {
   const trains: ScrapedTrain[] = [];
   const notices: ScrapedNotice[] = [];
@@ -60,33 +60,52 @@ async function scrapeStatus(): Promise<{ trains: ScrapedTrain[]; notices: Scrape
     });
     const $ = cheerio.load(html);
 
-    // Each line is a .rounded-xl card with an h2 (line name) and .msg-row children
+
     $(".rounded-xl").each((_i, card) => {
       const lineName = $(card).find("h2").first().text().trim();
       if (!lineName) return;
 
       const resolvedLine = resolveLine(lineName) !== "Unknown" ? resolveLine(lineName) : lineName;
 
-      // Each update row: time in span.font-mono, message in p.msg-text
+      
       $(card).find(".msg-row").each((_j, row) => {
-        const time = $(row).find("span").first().text().trim();   // e.g. "14:30"
-        const msg  = $(row).find("p").first().text().trim();      // e.g. "Inbound - T3212 departed..."
+        const time = $(row).find("span").first().text().trim();   
+        const msg  = $(row).find("p").first().text().trim();      
         if (!msg) return;
 
-        // Detect status from message text
+        
         let status = "Update";
         if (/(cancel|suspend|no service)/i.test(msg))  status = "Cancelled";
         else if (/(delay|late|slow)/i.test(msg))       status = "Delayed";
         else if (/(on time|normal|resumed)/i.test(msg)) status = "On Time";
 
-        // Try to extract train number e.g. T3212
+        
         const trainNoMatch = msg.match(/T(\d{3,5})/i);
         const trainNo = trainNoMatch ? trainNoMatch[0].toUpperCase() : "LIVE";
 
-        // Try to extract station names from message
-        const fromMatch = msg.match(/departed?\s+([A-Za-z ']+?)\s+station/i);
+    
+        const fromMatch = msg.match(/departed?\s+([A-Za-z ']+?)\s+station/i)
+                       ?? msg.match(/from\s+([A-Za-z ']+?)\s+(?:to|station)/i);
         const toMatch   = msg.match(/en[- ]?route\s+([A-Za-z ']+?)\s+station/i)
-                       ?? msg.match(/to\s+([A-Za-z ']+?)\s+station/i);
+                       ?? msg.match(/to\s+([A-Za-z ']+?)(?:\s+station|$)/i);
+
+        
+        const KNOWN_STATIONS = ["Cape Town","Stellenbosch","Bellville","Parow","Goodwood","Salt River","Woodstock","Observatory","Mowbray","Rondebosch","Newlands","Claremont","Wynberg","Retreat","Muizenberg","Fish Hoek","Simon's Town","Khayelitsha","Mitchells Plain","Philippi","Nyanga","Langa","Pinelands","Nolungile","Mutual"];
+        const mentionedStations = KNOWN_STATIONS.filter((s) => msg.toLowerCase().includes(s.toLowerCase()));
+
+        const fromStation = fromMatch
+          ? fromMatch[1].trim()
+          : mentionedStations.length >= 2
+            ? mentionedStations[0]
+            : lineName !== "Advisories"
+              ? resolvedLine.replace(" Line", "")
+              : (mentionedStations[0] ?? "Unknown");
+
+        const toStation = toMatch
+          ? toMatch[1].trim()
+          : mentionedStations.length >= 2
+            ? mentionedStations[mentionedStations.length - 1]
+            : "Cape Town";
 
         notices.push({
           title: `${resolvedLine} — ${time ? time + " — " : ""}${msg.slice(0, 100)}`,
@@ -97,8 +116,8 @@ async function scrapeStatus(): Promise<{ trains: ScrapedTrain[]; notices: Scrape
 
         trains.push({
           train_no: trainNo,
-          from_station: fromMatch ? fromMatch[1].trim() : resolvedLine.replace(" Line", ""),
-          to_station: toMatch ? toMatch[1].trim() : "Cape Town",
+          from_station: fromStation,
+          to_station: toStation,
           departure: time || "",
           arrival: "",
           status,
@@ -118,10 +137,8 @@ async function scrapeStatus(): Promise<{ trains: ScrapedTrain[]; notices: Scrape
   return { trains, notices };
 }
 
-// ── Persist to Supabase ───────────────────────────────────────────────────────
 async function persistToSupabase(trains: ScrapedTrain[], notices: ScrapedNotice[]) {
   if (trains.length > 0) {
-    // Delete old scraped rows, insert fresh batch
     await supabase.from("scraped_trains").delete().lt("scraped_at", new Date(Date.now() - 30 * 60 * 1000).toISOString());
     const { error } = await supabase.from("scraped_trains").insert(trains);
     if (error) console.warn("[scraper] scraped_trains insert error:", error.message);
@@ -136,11 +153,10 @@ async function persistToSupabase(trains: ScrapedTrain[], notices: ScrapedNotice[
   }
 }
 
-// ── In-memory cache (fallback when Supabase not configured) ──────────────────
 let memCache: { trains: ScrapedTrain[]; notices: ScrapedNotice[]; fetchedAt: number } | null = null;
 const CACHE_TTL = 10 * 60 * 1000;
 
-// ── Main scrape function (called by cron + chatbot) ───────────────────────────
+
 export async function runScrape(): Promise<{ trains: ScrapedTrain[]; notices: ScrapedNotice[] }> {
   if (memCache && Date.now() - memCache.fetchedAt < CACHE_TTL) {
     return { trains: memCache.trains, notices: memCache.notices };
@@ -150,13 +166,11 @@ export async function runScrape(): Promise<{ trains: ScrapedTrain[]; notices: Sc
 
   memCache = { trains, notices, fetchedAt: Date.now() };
 
-  // Persist async — don't block response
   persistToSupabase(trains, notices).catch(() => {});
 
   return { trains, notices };
 }
 
-// ── Legacy export used by old chatbot code ────────────────────────────────────
 export async function scrapeTrains() {
   const { trains } = await runScrape();
   return trains.map((t) => ({

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircle, X, Send, Bot, User, Mic, MicOff } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -213,13 +213,13 @@ function Bubble({ msg }: { msg: ChatMsg }) {
         </div>
       )}
       <div
-        className={`max-w-[78%] whitespace-pre-wrap rounded-md px-3 py-2 text-sm leading-relaxed ${
+        className={`max-w-[78%] rounded-md px-3 py-2 text-sm leading-relaxed ${
           isUser
             ? "bg-primary text-primary-foreground rounded-br-sm"
             : "bg-card text-foreground border border-border rounded-bl-sm"
         }`}
       >
-        {formatMarkdown(msg.content)}
+        {renderMarkdown(msg.content)}
       </div>
       {isUser && (
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
@@ -230,15 +230,86 @@ function Bubble({ msg }: { msg: ChatMsg }) {
   );
 }
 
-function formatMarkdown(text: string) {
+function formatInline(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((p, i) =>
     p.startsWith("**") && p.endsWith("**") ? (
       <strong key={i}>{p.slice(2, -2)}</strong>
     ) : (
       <span key={i}>{p}</span>
-    ),
+    )
   );
+}
+
+function renderMarkdown(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Detect markdown table (header row followed by separator)
+    if (
+      line.trim().startsWith("|") &&
+      lines[i + 1]?.trim().startsWith("|")
+    ) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      const [headerRow, , ...bodyRows] = tableLines;
+      const headers = headerRow.split("|").filter((c) => c.trim() !== "");
+      elements.push(
+        <div key={i} className="overflow-x-auto my-1">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr>
+                {headers.map((h, hi) => (
+                  <th key={hi} className="border border-border bg-secondary px-2 py-1 text-left font-semibold">
+                    {h.trim()}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, ri) => {
+                const cells = row.split("|").filter((c) => c.trim() !== "");
+                return (
+                  <tr key={ri} className={ri % 2 === 0 ? "bg-background" : "bg-secondary/40"}>
+                    {cells.map((cell, ci) => (
+                      <td key={ci} className="border border-border px-2 py-1">
+                        {formatInline(cell.trim())}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    // Bullet point
+    if (line.trim().startsWith("•") || line.trim().startsWith("-")) {
+      elements.push(
+        <div key={i} className="flex gap-1">
+          <span>•</span>
+          <span>{formatInline(line.trim().replace(/^[•\-]\s*/, ""))}</span>
+        </div>
+      );
+    } else if (line.trim() === "") {
+      elements.push(<div key={i} className="h-1" />);
+    } else {
+      elements.push(<div key={i}>{formatInline(line)}</div>);
+    }
+    i++;
+  }
+
+  return <>{elements}</>;
 }
 
 function Dot({ delay = 0 }: { delay?: number }) {
