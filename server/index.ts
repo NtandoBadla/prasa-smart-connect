@@ -2,7 +2,9 @@ import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
+import cron from "node-cron";
 import { supabase } from "./db";
+import { runScrape } from "./scraper";
 
 const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
@@ -259,4 +261,17 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const PORT = process.env.PORT ?? 3001;
-app.listen(PORT, () => console.log(`PRASA API running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`PRASA API running on http://localhost:${PORT}`);
+  // Run scraper immediately on startup, then every 10 minutes
+  runScrape().then(({ trains, notices }) =>
+    console.log(`[cron] Initial scrape: ${trains.length} trains, ${notices.length} notices`)
+  ).catch(console.error);
+  cron.schedule("*/10 * * * *", () => {
+    runScrape()
+      .then(({ trains, notices }) =>
+        console.log(`[cron] Scraped: ${trains.length} trains, ${notices.length} notices`)
+      )
+      .catch((err) => console.error("[cron] Scrape failed:", err.message));
+  });
+});
