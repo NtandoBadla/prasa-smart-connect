@@ -196,15 +196,14 @@ function ruleBasedReply(message: string, trains: any[], notices: any[], adminUpd
   if (/\b(hi|hello|hey|sawubona|molo|howzit|good morning|good afternoon)\b/.test(lower)) {
     const hasLive = trains.length > 0 || notices.length > 0;
     let reply = `Hello! I'm your PRASA Metrorail assistant.\n\n`;
-    reply += `| Topic | Ask me |
-|-------|--------|
-| Delays & cancellations | "Are there delays today?" |
-| Live train status | "Status on Northern Line" |
-| Route info | "Train from Stellenbosch to Cape Town" |
-| Safe coach | "Safe coach from Khayelitsha" |
-| Crowding | "How busy is the Southern Line?" |`;
-    if (hasLive) reply += `\n\nI currently have **${trains.length}** live train update(s) and **${notices.length}** notice(s).`;
-    else reply += `\n\nNo live data at the moment — try again shortly.`;
+    reply += `Ask me about:\n`;
+    reply += `• Delays & cancellations — "Are there delays today?"\n`;
+    reply += `• Live train status — "Status on Northern Line"\n`;
+    reply += `• Route info — "Train from Stellenbosch to Cape Town"\n`;
+    reply += `• Safe coach — "Safe coach from Khayelitsha"\n`;
+    reply += `• Crowding — "How busy is the Southern Line?"\n\n`;
+    if (hasLive) reply += `I currently have **${trains.length}** live train update(s) and **${notices.length}** notice(s).`;
+    else reply += `No live data at the moment — try again shortly.`;
     return reply;
   }
 
