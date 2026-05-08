@@ -248,27 +248,27 @@ function renderMarkdown(text: string) {
 
   while (i < lines.length) {
     const line = lines[i];
+    const trimmed = line.trim();
 
-    // Detect markdown table (header row followed by separator)
-    if (
-      line.trim().startsWith("|") &&
-      lines[i + 1]?.trim().startsWith("|")
-    ) {
+    // Detect markdown table — any line starting with | that has a separator row nearby
+    if (trimmed.startsWith("|")) {
       const tableLines: string[] = [];
       while (i < lines.length && lines[i].trim().startsWith("|")) {
         tableLines.push(lines[i]);
         i++;
       }
-      const [headerRow, , ...bodyRows] = tableLines;
+      // First row = header, second row = separator (---|---), rest = body
+      const headerRow = tableLines[0];
+      const bodyRows = tableLines.slice(2); // skip separator row
       const headers = headerRow.split("|").filter((c) => c.trim() !== "");
       elements.push(
-        <div key={i} className="overflow-x-auto my-1">
+        <div key={`table-${i}`} className="overflow-x-auto my-1">
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr>
                 {headers.map((h, hi) => (
                   <th key={hi} className="border border-border bg-secondary px-2 py-1 text-left font-semibold">
-                    {h.trim()}
+                    {formatInline(h.trim())}
                   </th>
                 ))}
               </tr>
@@ -294,14 +294,14 @@ function renderMarkdown(text: string) {
     }
 
     // Bullet point
-    if (line.trim().startsWith("•") || line.trim().startsWith("-")) {
+    if (trimmed.startsWith("•") || trimmed.startsWith("-")) {
       elements.push(
         <div key={i} className="flex gap-1">
           <span>•</span>
-          <span>{formatInline(line.trim().replace(/^[•\-]\s*/, ""))}</span>
+          <span>{formatInline(trimmed.replace(/^[•\-]\s*/, ""))}</span>
         </div>
       );
-    } else if (line.trim() === "") {
+    } else if (trimmed === "") {
       elements.push(<div key={i} className="h-1" />);
     } else {
       elements.push(<div key={i}>{formatInline(line)}</div>);

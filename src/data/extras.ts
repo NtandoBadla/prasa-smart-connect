@@ -175,19 +175,25 @@ export function crowdingAdvice(line: string, departureTime?: string): string {
   if (departureTime) hour = parseInt(departureTime.split(":")[0]);
 
   const peak = isPeak(hour, dow);
-  const base = LINE_BASE[line] ?? LINE_BASE["Southern Line"];
   const loads = getCrowding("", 8, line, departureTime);
   const best = bestCoach(loads);
 
-  return (
-    `**${line} crowding (${peak ? "peak" : "off-peak"}):**\n` +
-    `Overall occupancy ~${peak ? base.peak : base.offPeak}%\n` +
-    `• Coaches 1–2 (front): High — fills first at Cape Town\n` +
-    `• Coaches 3–5 (middle): Moderate\n` +
-    `• Coaches 6–8 (rear): Low — least crowded\n\n` +
-    `✅ **Best coach: ${best.coach}** (${best.load}% full, ${best.level} occupancy)\n` +
-    `Tip: ${peak ? "It's peak hour — board early and move to rear coaches." : "Off-peak — most coaches have space."}`
-  );
+  let reply = `**${line} crowding (${peak ? "peak" : "off-peak"}):**\n\n`;
+  reply += `| Coach | Occupancy | Level | Recommendation |\n`;
+  reply += `|-------|-----------|-------|----------------|\n`;
+  reply += loads.map((c) => {
+    const rec = c.coach === best.coach
+      ? "\u2705 Best choice"
+      : c.level === "Low"
+        ? "\ud83d\udc4d Good"
+        : c.level === "Moderate"
+          ? "\u26a0 Moderate"
+          : "\u274c Avoid";
+    return `| Coach ${c.coach} | ${c.load}% | ${c.level} | ${rec} |`;
+  }).join("\n");
+  reply += `\n\n\u2705 **Board Coach ${best.coach}** \u2014 least crowded (${best.load}% full, ${best.level}).`;
+  reply += `\n\ud83d\udca1 ${peak ? "Peak hour \u2014 board early and move to rear coaches." : "Off-peak \u2014 most coaches have space."}`;
+  return reply;
 }
 
 // News
