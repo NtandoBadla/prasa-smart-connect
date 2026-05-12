@@ -45,9 +45,9 @@ const STATION_COORDS: Record<string, [number, number]> = {
 };
 
 const LINE_PATHS: Record<string, string[]> = {
-  "Southern Line":   ["Cape Town","Salt River","Observatory","Mowbray","Rondebosch","Newlands","Claremont","Wynberg","Retreat","Muizenberg","Fish Hoek","Simon's Town"],
-  "Northern Line":   ["Cape Town","Salt River","Pinelands","Goodwood","Parow","Bellville","Stellenbosch"],
-  "Central Line":    ["Cape Town","Salt River","Langa","Nyanga","Philippi","Mitchells Plain","Khayelitsha"],
+  "Southern Line":   ["Cape Town","Woodstock","Salt River","Observatory","Mowbray","Rondebosch","Newlands","Claremont","Wynberg","Retreat","Muizenberg","Fish Hoek","Simon's Town"],
+  "Northern Line":   ["Cape Town","Woodstock","Salt River","Pinelands","Goodwood","Parow","Bellville","Stellenbosch"],
+  "Central Line":    ["Cape Town","Woodstock","Salt River","Langa","Nyanga","Philippi","Mitchells Plain","Khayelitsha"],
   "Cape Flats Line": ["Cape Town","Salt River","Pinelands","Nyanga","Philippi","Retreat"],
 };
 

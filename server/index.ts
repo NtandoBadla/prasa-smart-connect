@@ -107,7 +107,32 @@ app.use("/api/chatbot", chatbotRouter);
 app.use("/api/tickets", ticketsRouter);
 app.use("/api/sentiment", sentimentRouter);
 
-// ── HuggingFace proxy (works in both dev and production) ──────────────────────
+// ── Coach feedback (sentiment submissions from crowding page) ──────────────────
+app.post("/api/coach-feedback", async (req, res) => {
+  const { train_no, line, from_station, to_station, coach, feedback_text,
+          hf_label, hf_confidence, vader_label, vader_compound, travel_time } = req.body;
+  if (!feedback_text || !coach) { res.status(400).json({ error: "Missing fields" }); return; }
+  const { error } = await supabase.from("coach_feedback").insert({
+    train_no, line, from_station, to_station, coach,
+    feedback_text, hf_label, hf_confidence: Number(hf_confidence),
+    vader_label, vader_compound: Number(vader_compound),
+    travel_time, submitted_at: new Date().toISOString(),
+  });
+  if (error) { console.error("coach_feedback insert:", error.message); res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
+});
+
+app.get("/api/coach-feedback", requireAuth, async (_req, res) => {
+  const { data, error } = await supabase
+    .from("coach_feedback")
+    .select("*")
+    .order("submitted_at", { ascending: false })
+    .limit(200);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+
 app.post("/api/hf-proxy", async (req, res) => {
   const hfKey = process.env.HUGGINGFACE_API_KEY;
   if (!hfKey) { res.status(500).json({ error: "HF key not configured" }); return; }

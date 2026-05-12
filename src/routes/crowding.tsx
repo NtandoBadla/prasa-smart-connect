@@ -128,28 +128,36 @@ const coachSentiment = useMemo(() => {
 
     const top = scored[0];
 
-    // 🧠 Save result for this coach
+    // 🧠 Save result locally for this coach
     setResultsByContext((prev) => {
-  const existing = prev[contextKey] || [];
+      const existing = prev[contextKey] || [];
+      return {
+        ...prev,
+        [contextKey]: [
+          ...existing,
+          { coach: selectedCoach, hf: { label: top.label, confidence: top.score }, vader: { label: vaderResult.label, compound: vaderResult.compound } },
+        ],
+      };
+    });
 
-  return {
-    ...prev,
-    [contextKey]: [
-      ...existing,
-      {
+    // 💾 Persist to backend
+    fetch("/api/coach-feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        train_no: train.trainNo,
+        line: train.line,
+        from_station: train.from,
+        to_station: train.to,
         coach: selectedCoach,
-        hf: {
-          label: top.label,
-          confidence: top.score,
-        },
-        vader: {
-          label: vaderResult.label,
-          compound: vaderResult.compound,
-        },
-      },
-    ],
-  };
-});
+        feedback_text: text,
+        hf_label: top.label,
+        hf_confidence: top.score,
+        vader_label: vaderResult.label,
+        vader_compound: vaderResult.compound,
+        travel_time: time,
+      }),
+    }).catch(() => {}); // fire-and-forget
 
     setFeedback("");
   } catch (err) {

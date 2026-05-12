@@ -180,6 +180,14 @@ export const api = {
   addTimetableEntry: (data: object) =>
     apiFetch<Record<string, unknown>>("/tickets/timetable", { method: "POST", body: JSON.stringify(data) }),
 
+  // ── Coach Feedback ──────────────────────────────────────────────────────────
+  coachFeedback: () =>
+    apiFetch<{
+      id: string; train_no: string; line: string; from_station: string; to_station: string;
+      coach: number; feedback_text: string; hf_label: string; hf_confidence: number;
+      vader_label: string; vader_compound: number; travel_time: string; submitted_at: string;
+    }[]>("/coach-feedback"),
+
   // ── Sentiment ────────────────────────────────────────────────────────────────
   analyzeSentiment: (texts: string[]) =>
     apiFetch<{

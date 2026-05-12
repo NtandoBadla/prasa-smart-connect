@@ -26,3 +26,24 @@ create table if not exists scraped_notices (
 );
 
 create index if not exists idx_scraped_notices_scraped_at on scraped_notices (scraped_at desc);
+
+-- Coach feedback from crowding/sentiment page
+create table if not exists coach_feedback (
+  id             bigserial primary key,
+  train_no       text,
+  line           text,
+  from_station   text,
+  to_station     text,
+  coach          integer,
+  feedback_text  text,
+  hf_label       text,
+  hf_confidence  numeric,
+  vader_label    text,
+  vader_compound numeric,
+  travel_time    text,
+  submitted_at   timestamptz default now()
+);
+
+create index if not exists idx_coach_feedback_submitted_at on coach_feedback (submitted_at desc);
+create index if not exists idx_coach_feedback_coach on coach_feedback (coach);
+create index if not exists idx_coach_feedback_line on coach_feedback (line);

@@ -7,14 +7,14 @@ import { STATIONS } from "@/data/prasa";
 import {
   Train, AlertTriangle, Newspaper, LayoutDashboard,
   LogOut, Plus, Pencil, Trash2, Check, X, RefreshCw,
-  Users, Send, Bell, ShieldAlert, CalendarClock,
+  Users, Send, Bell, ShieldAlert, CalendarClock, MessageSquare,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
 });
 
-type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety" | "timetable";
+type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety" | "timetable" | "coachfeedback";
 
 type Stats = {
   totalSchedules: number; onTime: number; delayed: number;
@@ -45,6 +45,7 @@ function AdminDashboard() {
   const [updates, setUpdates] = useState<TrainUpdateRecord[]>([]);
   const [safetyIncidents, setSafetyIncidents] = useState<SafetyIncident[]>([]);
   const [timetableEntries, setTimetableEntries] = useState<Record<string, unknown>[]>([]);
+  const [coachFeedback, setCoachFeedback] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -57,6 +58,7 @@ function AdminDashboard() {
       api.recentUpdates().then(setUpdates).catch(() => {});
       api.adminSafetyIncidents().then(setSafetyIncidents).catch(() => {});
       api.timetable().then(setTimetableEntries).catch(() => {});
+      api.coachFeedback().then(setCoachFeedback).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -95,6 +97,13 @@ function AdminDashboard() {
             count={safetyIncidents.filter((i) => i.status === "pending").length}
           />
           <NavItem icon={<CalendarClock className="h-4 w-4" />} label="Timetable" active={tab === "timetable"} onClick={() => setTab("timetable")} />
+          <NavItemBadge
+            icon={<MessageSquare className="h-4 w-4" />}
+            label="Coach Feedback"
+            active={tab === "coachfeedback"}
+            onClick={() => setTab("coachfeedback")}
+            count={coachFeedback.filter((f) => f.hf_label === "negative" || f.vader_compound < -0.2).length}
+          />
         </nav>
         <div className="border-t border-border p-3 space-y-1">
           <Link to="/" className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary">
@@ -124,6 +133,7 @@ function AdminDashboard() {
           {tab === "subscribers" && <SubscribersTab subscribers={subscribers} />}
           {tab === "safety" && <SafetyTab incidents={safetyIncidents} onRefresh={refresh} />}
           {tab === "timetable" && <TimetableTab entries={timetableEntries} onRefresh={refresh} />}
+          {tab === "coachfeedback" && <CoachFeedbackTab feedback={coachFeedback} />}
         </main>
       </div>
     </div>
@@ -521,6 +531,132 @@ function Th({ children }: { children: React.ReactNode }) {
 }
 function Td({ children }: { children: React.ReactNode }) {
   return <td className="px-4 py-2">{children}</td>;
+}
+
+// ── Coach Feedback Tab ──────────────────────────────────────────────────────────────────
+function CoachFeedbackTab({ feedback }: { feedback: any[] }) {
+  const [filterLine, setFilterLine] = useState("");
+  const [filterSentiment, setFilterSentiment] = useState("");
+
+  const filtered = feedback.filter((f) => {
+    if (filterLine && f.line !== filterLine) return false;
+    if (filterSentiment === "negative" && f.hf_label !== "negative" && f.vader_compound >= -0.2) return false;
+    if (filterSentiment === "positive" && f.hf_label !== "positive" && f.vader_compound <= 0.2) return false;
+    return true;
+  });
+
+  const negative = feedback.filter((f) => f.hf_label === "negative" || f.vader_compound < -0.2).length;
+  const positive = feedback.filter((f) => f.hf_label === "positive" && f.vader_compound >= 0).length;
+
+  // Group by coach for summary
+  const byCoach: Record<number, { count: number; negCount: number; texts: string[] }> = {};
+  feedback.forEach((f) => {
+    if (!byCoach[f.coach]) byCoach[f.coach] = { count: 0, negCount: 0, texts: [] };
+    byCoach[f.coach].count++;
+    if (f.hf_label === "negative" || f.vader_compound < -0.2) byCoach[f.coach].negCount++;
+    byCoach[f.coach].texts.push(f.feedback_text);
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Total Submissions" value={feedback.length} color="bg-primary" />
+        <StatCard label="Negative Sentiment" value={negative} color="bg-destructive" />
+        <StatCard label="Positive Sentiment" value={positive} color="bg-success" />
+      </div>
+
+      {/* Coach summary */}
+      {Object.keys(byCoach).length > 0 && (
+        <div className="rounded-md border border-border bg-card p-5">
+          <h3 className="mb-3 font-semibold text-foreground">Sentiment by Coach</h3>
+          <div className="grid gap-3 sm:grid-cols-4">
+            {Object.entries(byCoach).sort((a, b) => Number(a[0]) - Number(b[0])).map(([coach, data]) => {
+              const negPct = Math.round((data.negCount / data.count) * 100);
+              const color = negPct > 60 ? "border-destructive bg-destructive/10" : negPct > 30 ? "border-warning bg-warning/10" : "border-success bg-success/10";
+              return (
+                <div key={coach} className={`rounded-md border p-3 ${color}`}>
+                  <div className="text-lg font-bold text-foreground">Coach {coach}</div>
+                  <div className="text-xs text-muted-foreground">{data.count} report{data.count !== 1 ? "s" : ""}</div>
+                  <div className="mt-1 text-sm font-semibold">{negPct}% negative</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <select
+          value={filterLine}
+          onChange={(e) => setFilterLine(e.target.value)}
+          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+        >
+          <option value="">All lines</option>
+          {["Southern Line", "Northern Line", "Central Line", "Cape Flats Line"].map((l) => (
+            <option key={l}>{l}</option>
+          ))}
+        </select>
+        <select
+          value={filterSentiment}
+          onChange={(e) => setFilterSentiment(e.target.value)}
+          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+        >
+          <option value="">All sentiments</option>
+          <option value="negative">Negative only</option>
+          <option value="positive">Positive only</option>
+        </select>
+        <span className="self-center text-sm text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {/* Table */}
+      {filtered.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          No coach feedback submitted yet.
+        </p>
+      ) : (
+        <div className="rounded-md border border-border bg-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+              <tr>
+                <Th>Time</Th><Th>Train</Th><Th>Route</Th><Th>Coach</Th>
+                <Th>HF</Th><Th>VADER</Th><Th>Feedback</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((f) => {
+                const isNeg = f.hf_label === "negative" || f.vader_compound < -0.2;
+                return (
+                  <tr key={f.id} className={`border-t border-border ${isNeg ? "bg-destructive/5" : ""}` }>
+                    <Td>{new Date(f.submitted_at).toLocaleString("en-ZA", { dateStyle: "short", timeStyle: "short" })}</Td>
+                    <Td>#{f.train_no} <span className="text-xs text-muted-foreground">{f.line}</span></Td>
+                    <Td>{f.from_station} → {f.to_station}</Td>
+                    <Td><span className="font-bold">Coach {f.coach}</span></Td>
+                    <Td>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        f.hf_label === "positive" ? "bg-success/15 text-success" :
+                        f.hf_label === "negative" ? "bg-destructive/15 text-destructive" :
+                        "bg-secondary text-muted-foreground"
+                      }`}>{f.hf_label} ({(f.hf_confidence * 100).toFixed(0)}%)</span>
+                    </Td>
+                    <Td>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        f.vader_compound >= 0.2 ? "bg-success/15 text-success" :
+                        f.vader_compound <= -0.2 ? "bg-destructive/15 text-destructive" :
+                        "bg-secondary text-muted-foreground"
+                      }`}>{f.vader_label} ({f.vader_compound.toFixed(2)})</span>
+                    </Td>
+                    <Td><span className="line-clamp-2 block max-w-xs text-muted-foreground">{f.feedback_text}</span></Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Train Update Tab ──────────────────────────────────────────────────────────
