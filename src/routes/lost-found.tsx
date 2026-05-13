@@ -33,6 +33,8 @@ function LostFoundPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  const [showReferenceModal, setShowReferenceModal] = useState(false);
+  const [submittedReport, setSubmittedReport] = useState<Report | null>(null);
 
   const [item, setItem] = useState("");
   const [station, setStation] = useState(STATIONS[0]);
@@ -55,10 +57,10 @@ function LostFoundPage() {
     try {
       const newReport = await api.reportLostFound({ item, station, date, contact });
       setReports((prev) => [newReport, ...prev]);
-      setSubmitted(true);
+      setSubmittedReport(newReport);
+      setShowReferenceModal(true);
       setItem("");
       setContact("");
-      setTimeout(() => setSubmitted(false), 3500);
     } catch (err: any) {
       setError(err.message ?? "Failed to submit. Make sure the server is running.");
     } finally {
@@ -130,64 +132,24 @@ function LostFoundPage() {
               {submitting ? "Submitting…" : "Submit report"}
             </button>
 
-            {submitted && (
-              <div className="flex items-center gap-2 rounded-sm border border-success/40 bg-success/10 p-3 text-sm text-success">
-                <CheckCircle2 className="h-4 w-4" /> Report saved. Our team will be in touch.
-              </div>
-            )}
             {error && (
               <p className="rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
             )}
           </div>
         </form>
 
-        {/* Reports list */}
-        <div>
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search items or stations…"
-              className="w-full rounded-sm border border-input bg-background py-2 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-            />
-          </div>
+        {/* Reference ID Modal */}
+        {showReferenceModal && submittedReport && (
+          <ReferenceModal
+            report={submittedReport}
+            onClose={() => {
+              setShowReferenceModal(false);
+              setSubmittedReport(null);
+            }}
+          />
+        )}
 
-          {loadingReports ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-20 animate-pulse rounded-md border border-border bg-card" />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filtered.map((r) => (
-                <article key={r.id} className="rounded-md border border-border bg-card p-4 shadow-card">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-foreground">{r.item}</h3>
-                    <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${
-                        r.status === "matched"
-                          ? "border-success/30 bg-success/15 text-success"
-                          : "border-warning/40 bg-warning/20 text-foreground"
-                      }`}
-                    >
-                      {r.status === "matched" ? "Matched" : "Open"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {r.station} · {new Date(r.date).toLocaleDateString("en-ZA")} · Ref {r.contact_ref}
-                  </p>
-                </article>
-              ))}
-              {filtered.length === 0 && (
-                <p className="rounded-md border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
-                  No matching reports.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+       
       </section>
 
       <Footer />
@@ -202,5 +164,88 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
       {children}
     </label>
+  );
+}
+
+function ReferenceModal({ report, onClose }: { report: Report; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(report.contact_ref);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+            <CheckCircle2 className="h-6 w-6 text-success" />
+          </div>
+          
+          <h2 className="mb-2 text-lg font-semibold text-foreground">Report Submitted Successfully!</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Your lost item report has been submitted. Please save your reference ID.
+          </p>
+
+          <div className="mb-6 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Your Reference ID</p>
+            <div className="flex items-center justify-center gap-2">
+              <code className="text-xl font-bold text-primary">{report.contact_ref}</code>
+              <button
+                onClick={copyToClipboard}
+                className="rounded-sm border border-border p-1 hover:bg-secondary"
+                title="Copy to clipboard"
+              >
+                {copied ? (
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                ) : (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {copied && <p className="mt-1 text-xs text-success">Copied to clipboard!</p>}
+          </div>
+
+          <div className="mb-6 rounded-sm border border-warning/40 bg-warning/10 p-3 text-left">
+            <h3 className="mb-2 text-sm font-semibold text-foreground">📝 Important Reminders:</h3>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              <li>• <strong>Save this reference ID</strong> - you'll need it to claim your item</li>
+              <li>• <strong>Take a screenshot</strong> or write it down safely</li>
+              <li>• <strong>Check your email</strong> for confirmation and updates</li>
+              <li>• <strong>Bring proof of ownership</strong> when collecting</li>
+            </ul>
+          </div>
+
+          <div className="mb-4 text-left text-xs text-muted-foreground">
+            <p><strong>Item:</strong> {report.item}</p>
+            <p><strong>Station:</strong> {report.station}</p>
+            <p><strong>Date:</strong> {new Date(report.date).toLocaleDateString("en-ZA")}</p>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={copyToClipboard}
+              className="flex-1 rounded-sm border border-primary bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              {copied ? "Copied!" : "Copy Reference ID"}
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-sm border border-border px-4 py-2 text-sm font-semibold hover:bg-secondary"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

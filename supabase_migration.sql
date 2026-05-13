@@ -27,6 +27,23 @@ create table if not exists scraped_notices (
 
 create index if not exists idx_scraped_notices_scraped_at on scraped_notices (scraped_at desc);
 
+-- Lost & Found items
+create table if not exists lost_found (
+  id          bigserial primary key,
+  item        text not null,
+  station     text not null,
+  date        date not null,
+  contact     text not null, -- private email/phone
+  contact_ref text not null unique, -- public reference ID
+  status      text default 'open' check (status in ('open', 'matched')),
+  created_at  timestamptz default now()
+);
+
+create index if not exists idx_lost_found_created_at on lost_found (created_at desc);
+create index if not exists idx_lost_found_station on lost_found (station);
+create index if not exists idx_lost_found_status on lost_found (status);
+create index if not exists idx_lost_found_contact_ref on lost_found (contact_ref);
+
 -- Coach feedback from crowding/sentiment page
 create table if not exists coach_feedback (
   id             bigserial primary key,

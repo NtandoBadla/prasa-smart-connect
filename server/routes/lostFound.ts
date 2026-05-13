@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../db";
+import { sendEmail } from "../mailer";
 
 const router = Router();
 
@@ -9,7 +10,7 @@ const isConfigured = () =>
   !!process.env.SUPABASE_SERVICE_KEY &&
   !process.env.SUPABASE_SERVICE_KEY.includes("REPLACE");
 
-// GET /api/lost-found
+// GET /api/lost-found - Public endpoint (shows only open items without contact info)
 router.get("/", async (_req, res) => {
   if (!isConfigured()) { res.json([]); return; }
   const { data, error } = await supabase
@@ -20,7 +21,7 @@ router.get("/", async (_req, res) => {
   res.json(data ?? []);
 });
 
-// POST /api/lost-found
+// POST /api/lost-found - Report a lost item
 router.post("/", async (req, res) => {
   const { item, station, date, contact } = req.body as {
     item: string;
@@ -39,8 +40,8 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  // Generate a public reference — never expose the real contact
-  const contact_ref = `ref-${Date.now().toString(36).toUpperCase()}`;
+  // Generate a unique reference ID
+  const contact_ref = `LF-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
 
   const { data, error } = await supabase
     .from("lost_found")
@@ -61,24 +62,28 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  res.status(201).json(data);
-});
-
-// PATCH /api/lost-found/:id/status
-router.patch("/:id/status", async (req, res) => {
-  const { status } = req.body as { status: "open" | "matched" };
-  if (!["open", "matched"].includes(status)) {
-    res.status(400).json({ error: "status must be open or matched" });
-    return;
+  // Send confirmation email to user
+  try {
+    await sendEmail({
+      to: contact.trim(),
+      subject: "Lost Item Report Confirmation - PRASA",
+      html: "", // Not used when templateId is provided
+      templateId: "template_lost_confirm",
+      templateParams: {
+        to_email: contact.trim(),
+        contact_ref: contact_ref,
+        item: item.trim(),
+        station: station.trim(),
+        date: new Date(date).toLocaleDateString('en-ZA'),
+        submitted_date: new Date().toLocaleDateString('en-ZA')
+      }
+    });
+  } catch (emailError) {
+    console.error("Failed to send confirmation email:", emailError);
+    // Don't fail the request if email fails
   }
-  const { data, error } = await supabase
-    .from("lost_found")
-    .update({ status })
-    .eq("id", req.params.id)
-    .select()
-    .single();
-  if (error) { res.status(500).json({ error: "Update failed" }); return; }
-  res.json(data);
+
+  res.status(201).json(data);
 });
 
 export default router;
