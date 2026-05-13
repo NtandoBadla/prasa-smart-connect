@@ -58,9 +58,18 @@ function HomePage() {
             </div>
           </div>
 
-          <div className="relative">
-            <div className="absolute -inset-3 rounded-md bg-destructive/20 blur-2xl" aria-hidden />
-          </div>
+          <div className="relative flex items-center justify-center">
+  <div
+    className="absolute -inset-3 rounded-md bg-destructive/20 blur-2xl"
+    aria-hidden
+  />
+
+  <img
+    src="/new trainImage.png"
+    alt="PRASA train"
+    className="relative z-10 w-full max-w-md object-contain drop-shadow-2xl"
+  />
+</div>
         </div>
       </section>
 
