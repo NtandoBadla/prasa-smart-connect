@@ -187,7 +187,7 @@ app.patch("/api/admin/safety/:id", requireAuth, async (req, res) => {
   res.json(data);
 });
 
-// ── Admin: Schedules CRUD ─────────────────────────────────────────────────────
+
 app.post("/api/admin/schedules", requireAuth, (req, res) => {
   const item: TrainSchedule = { ...req.body, id: randomUUID() };
   schedules.push(item);

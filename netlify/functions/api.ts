@@ -195,6 +195,51 @@ app.use(["/api/sentiment",     "/sentiment"],     sentimentRouter);
 app.use(["/api/lost-found",    "/lost-found"],    lostFoundRouter);
 app.use(["/api/safety",        "/safety"],        safetyRouter);
 
+// ── Coach feedback ────────────────────────────────────────────────────────────
+app.post(["/api/coach-feedback", "/coach-feedback"], async (req, res) => {
+  const { train_no, line, from_station, to_station, coach, feedback_text,
+          hf_label, hf_confidence, vader_label, vader_compound, travel_time } = req.body;
+  if (!feedback_text || !coach) { res.status(400).json({ error: "Missing fields" }); return; }
+  const { error } = await supabase.from("coach_feedback").insert({
+    train_no, line, from_station, to_station, coach,
+    feedback_text, hf_label, hf_confidence: Number(hf_confidence),
+    vader_label, vader_compound: Number(vader_compound),
+    travel_time, submitted_at: new Date().toISOString(),
+  });
+  if (error) { console.error("coach_feedback insert:", error.message); res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
+});
+
+app.get(["/api/coach-feedback", "/coach-feedback"], requireAuth, async (_req, res) => {
+  const { data, error } = await supabase
+    .from("coach_feedback")
+    .select("*")
+    .order("submitted_at", { ascending: false })
+    .limit(200);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+// ── HF Proxy ──────────────────────────────────────────────────────────────────
+app.post(["/api/hf-proxy", "/hf-proxy"], async (req, res) => {
+  const hfKey = process.env.HUGGINGFACE_API_KEY;
+  if (!hfKey) { res.status(500).json({ error: "HF key not configured" }); return; }
+  try {
+    const hfRes = await fetch(
+      "https://router.huggingface.co/hf-inference/models/j-hartmann/emotion-english-distilroberta-base",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${hfKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      }
+    );
+    const data = await hfRes.json();
+    res.status(hfRes.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: "HF request failed" });
+  }
+});
+
 // Admin-only: safety incidents
 app.get(["/api/admin/safety", "/admin/safety"], requireAuth, async (_req, res) => {
   if (!isSupabaseConfigured) { res.json([]); return; }
