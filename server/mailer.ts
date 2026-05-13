@@ -11,6 +11,44 @@ interface NotifyPayload {
   updatedAt: string;
 }
 
+interface EmailPayload {
+  to: string;
+  subject: string;
+  html: string;
+  templateId?: string;
+  templateParams?: Record<string, any>;
+}
+
+export async function sendEmail(payload: EmailPayload): Promise<void> {
+  const serviceId = process.env.EMAILJS_SERVICE_ID;
+  const templateId = payload.templateId || process.env.EMAILJS_TEMPLATE_ID;
+  const publicKey = process.env.EMAILJS_PUBLIC_KEY;
+  const privateKey = process.env.EMAILJS_PRIVATE_KEY;
+
+  if (!serviceId || !templateId || !publicKey || !privateKey) {
+    console.warn("EmailJS env vars not set — skipping email to", payload.to);
+    return;
+  }
+
+  const templateParams = payload.templateParams || {
+    to_email: payload.to,
+    subject: payload.subject,
+    message: payload.html,
+  };
+
+  await axios.post(
+    "https://api.emailjs.com/api/v1.0/email/send",
+    {
+      service_id: serviceId,
+      template_id: templateId,
+      user_id: publicKey,
+      accessToken: privateKey,
+      template_params: templateParams,
+    },
+    { timeout: 8_000 },
+  );
+}
+
 export async function sendNotification(payload: NotifyPayload): Promise<void> {
   const serviceId = process.env.EMAILJS_SERVICE_ID;
   const templateId = process.env.EMAILJS_TEMPLATE_ID;

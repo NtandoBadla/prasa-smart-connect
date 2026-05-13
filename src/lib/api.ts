@@ -224,6 +224,34 @@ export const api = {
       created_at: string;
     }>("/lost-found", { method: "POST", body: JSON.stringify(data) }),
 
+  // ── Admin: Lost & Found ─────────────────────────────────────────────────────
+  adminLostFound: () =>
+    apiFetch<{
+      id: string;
+      item: string;
+      station: string;
+      date: string;
+      contact: string;
+      contact_ref: string;
+      status: "open" | "matched";
+      created_at: string;
+    }[]>("/admin/lost-found"),
+
+  updateLostFoundStatus: (id: string, status: "open" | "matched") =>
+    apiFetch<{
+      id: string;
+      item: string;
+      station: string;
+      date: string;
+      contact: string;
+      contact_ref: string;
+      status: "open" | "matched";
+      created_at: string;
+    }>(`/admin/lost-found/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
   // ── Safety Incidents ────────────────────────────────────────────────────────
   reportSafetyIncident: (data: { type: string; station: string; details: string }) =>
     apiFetch<{

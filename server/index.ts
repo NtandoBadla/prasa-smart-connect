@@ -154,6 +154,83 @@ app.post("/api/hf-proxy", async (req, res) => {
 app.use("/api/lost-found", lostFoundRouter);
 app.use("/api/safety", safetyRouter);
 
+// ── Admin: Lost & Found ────────────────────────────────────────────────────────
+app.get("/api/admin/lost-found", requireAuth, async (_req, res) => {
+  if (!isSupabaseConfigured()) { res.json([]); return; }
+  const { data, error } = await supabase
+    .from("lost_found")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Lost & found fetch error:", error.message);
+    res.status(500).json({ error: "Failed to fetch lost & found items" });
+    return;
+  }
+  res.json(data ?? []);
+});
+
+app.patch("/api/admin/lost-found/:id", requireAuth, async (req, res) => {
+  if (!isSupabaseConfigured()) { res.status(503).json({ error: "Database not configured" }); return; }
+  const { status } = req.body as { status: "open" | "matched" };
+  if (!["open", "matched"].includes(status)) {
+    res.status(400).json({ error: "status must be open or matched" });
+    return;
+  }
+
+  // Get the item details first
+  const { data: item, error: fetchError } = await supabase
+    .from("lost_found")
+    .select("*")
+    .eq("id", req.params.id)
+    .single();
+
+  if (fetchError || !item) {
+    res.status(404).json({ error: "Item not found" });
+    return;
+  }
+
+  // Update the status
+  const { data, error } = await supabase
+    .from("lost_found")
+    .update({ status })
+    .eq("id", req.params.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("Lost & found update error:", error.message);
+    res.status(500).json({ error: "Failed to update item" });
+    return;
+  }
+
+  // If status changed to "matched", send email notification to user
+  if (status === "matched" && item.status !== "matched") {
+    try {
+      const { sendEmail } = require("./mailer");
+      await sendEmail({
+        to: item.contact,
+        subject: "Item Found - PRASA Lost & Found",
+        html: "", // Not used when templateId is provided
+        templateId: "template_item_found",
+        templateParams: {
+          to_email: item.contact,
+          contact_ref: item.contact_ref,
+          item: item.item,
+          station: item.station,
+          date: new Date(item.date).toLocaleDateString('en-ZA'),
+          found_date: new Date().toLocaleDateString('en-ZA')
+        }
+      });
+      console.log(`Sent found item notification to ${item.contact} for ref ${item.contact_ref}`);
+    } catch (emailError) {
+      console.error("Failed to send found item notification:", emailError);
+      // Don't fail the request if email fails
+    }
+  }
+
+  res.json(data);
+});
+
 // Admin-only: read safety incidents
 app.get("/api/admin/safety", requireAuth, async (_req, res) => {
   if (!isSupabaseConfigured()) { res.json([]); return; }

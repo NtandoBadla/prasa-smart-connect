@@ -195,6 +195,76 @@ app.use(["/api/sentiment",     "/sentiment"],     sentimentRouter);
 app.use(["/api/lost-found",    "/lost-found"],    lostFoundRouter);
 app.use(["/api/safety",        "/safety"],        safetyRouter);
 
+// ── Admin: Lost & Found ────────────────────────────────────────────────────────
+app.get(["/api/admin/lost-found", "/admin/lost-found"], requireAuth, async (_req, res) => {
+  if (!isSupabaseConfigured) { res.json([]); return; }
+  const { data, error } = await supabase
+    .from("lost_found")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Lost & found fetch error:", error.message);
+    res.status(500).json({ error: "Failed to fetch lost & found items" });
+    return;
+  }
+  res.json(data ?? []);
+});
+
+app.patch(["/api/admin/lost-found/:id", "/admin/lost-found/:id"], requireAuth, async (req, res) => {
+  if (!isSupabaseConfigured) { res.status(503).json({ error: "Database not configured" }); return; }
+  const { status } = req.body as { status: "open" | "matched" };
+  if (!["open", "matched"].includes(status)) {
+    res.status(400).json({ error: "status must be open or matched" });
+    return;
+  }
+
+  // Get the item details first
+  const { data: item, error: fetchError } = await supabase
+    .from("lost_found")
+    .select("*")
+    .eq("id", req.params.id)
+    .single();
+
+  if (fetchError || !item) {
+    res.status(404).json({ error: "Item not found" });
+    return;
+  }
+
+  // Update the status
+  const { data, error } = await supabase
+    .from("lost_found")
+    .update({ status })
+    .eq("id", req.params.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("Lost & found update error:", error.message);
+    res.status(500).json({ error: "Failed to update item" });
+    return;
+  }
+
+  // If status changed to "matched", send email notification to user
+  if (status === "matched" && item.status !== "matched") {
+    try {
+      // Simple email sending using EmailJS service
+      const emailData = {
+        to_email: item.contact,
+        subject: "Item Found - PRASA Lost & Found",
+        message: `Great News! Your Lost Item Has Been Found\n\nDear Passenger,\n\nWe're pleased to inform you that an item matching your description has been found!\n\nItem Details:\nReference ID: ${item.contact_ref}\nItem: ${item.item}\nStation: ${item.station}\nDate Reported: ${new Date(item.date).toLocaleDateString('en-ZA')}\n\nNext Steps:\n1. Bring your Reference ID: ${item.contact_ref}\n2. Bring proof of ownership (receipt, photo, or detailed description)\n3. Visit ${item.station} station during business hours\n4. Ask for the Lost & Found office\n\nImportant: Please collect your item within 30 days. Items not collected will be donated to charity.\n\nStation operating hours: Monday to Friday 06:00 - 18:00, Saturday 07:00 - 15:00\n\nBest regards,\nPRASA Lost & Found Team`
+      };
+      
+      // In production, you would integrate with your email service here
+      console.log(`Would send found item notification to ${item.contact} for ref ${item.contact_ref}`);
+    } catch (emailError) {
+      console.error("Failed to send found item notification:", emailError);
+      // Don't fail the request if email fails
+    }
+  }
+
+  res.json(data);
+});
+
 // ── Coach feedback ────────────────────────────────────────────────────────────
 app.post(["/api/coach-feedback", "/coach-feedback"], async (req, res) => {
   const { train_no, line, from_station, to_station, coach, feedback_text,

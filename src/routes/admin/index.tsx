@@ -7,14 +7,14 @@ import { STATIONS } from "@/data/prasa";
 import {
   Train, AlertTriangle, Newspaper, LayoutDashboard,
   LogOut, Plus, Pencil, Trash2, Check, X, RefreshCw,
-  Users, Send, Bell, ShieldAlert, CalendarClock, MessageSquare,
+  Users, Send, Bell, ShieldAlert, CalendarClock, MessageSquare, PackageSearch,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
 });
 
-type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety" | "timetable" | "coachfeedback";
+type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety" | "timetable" | "coachfeedback" | "lostfound";
 
 type Stats = {
   totalSchedules: number; onTime: number; delayed: number;
@@ -25,6 +25,7 @@ type Stats = {
 type Subscriber = { id: string; email: string; station: string; created_at: string };
 type TrainUpdateRecord = { id: string; train_no: string; line: string; station: string; status: string; delay_min: number; reason: string; updated_at: string };
 type SafetyIncident = { id: string; type: string; station: string; details: string; status: string; created_at: string };
+type LostFoundItem = { id: string; item: string; station: string; date: string; contact: string; contact_ref: string; status: "open" | "matched"; created_at: string };
 
 function useAdminGuard() {
   const navigate = useNavigate();
@@ -46,6 +47,7 @@ function AdminDashboard() {
   const [safetyIncidents, setSafetyIncidents] = useState<SafetyIncident[]>([]);
   const [timetableEntries, setTimetableEntries] = useState<Record<string, unknown>[]>([]);
   const [coachFeedback, setCoachFeedback] = useState<any[]>([]);
+  const [lostFoundItems, setLostFoundItems] = useState<LostFoundItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -59,6 +61,7 @@ function AdminDashboard() {
       api.adminSafetyIncidents().then(setSafetyIncidents).catch(() => {});
       api.timetable().then(setTimetableEntries).catch(() => {});
       api.coachFeedback().then(setCoachFeedback).catch(() => {});
+      api.adminLostFound().then(setLostFoundItems).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -104,6 +107,13 @@ function AdminDashboard() {
             onClick={() => setTab("coachfeedback")}
             count={coachFeedback.filter((f) => f.hf_label === "negative" || f.vader_compound < -0.2).length}
           />
+          <NavItemBadge
+            icon={<PackageSearch className="h-4 w-4" />}
+            label="Lost & Found"
+            active={tab === "lostfound"}
+            onClick={() => setTab("lostfound")}
+            count={lostFoundItems.filter((item) => item.status === "open").length}
+          />
         </nav>
         <div className="border-t border-border p-3 space-y-1">
           <Link to="/" className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary">
@@ -134,6 +144,7 @@ function AdminDashboard() {
           {tab === "safety" && <SafetyTab incidents={safetyIncidents} onRefresh={refresh} />}
           {tab === "timetable" && <TimetableTab entries={timetableEntries} onRefresh={refresh} />}
           {tab === "coachfeedback" && <CoachFeedbackTab feedback={coachFeedback} />}
+          {tab === "lostfound" && <LostFoundTab items={lostFoundItems} onRefresh={refresh} />}
         </main>
       </div>
     </div>
@@ -464,6 +475,135 @@ function NewsTab({ news, onRefresh }: { news: NewsItem[]; onRefresh: () => void 
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Lost & Found Tab ──────────────────────────────────────────────────────────────────────────────
+function LostFoundTab({ items, onRefresh }: { items: LostFoundItem[]; onRefresh: () => void }) {
+  const [filterStation, setFilterStation] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [updating, setUpdating] = useState<string | null>(null);
+
+  const filtered = items.filter((item) => {
+    if (filterStation && item.station !== filterStation) return false;
+    if (filterStatus && item.status !== filterStatus) return false;
+    return true;
+  });
+
+  const openItems = items.filter((item) => item.status === "open").length;
+  const matchedItems = items.filter((item) => item.status === "matched").length;
+
+  async function updateStatus(id: string, status: "open" | "matched") {
+    setUpdating(id);
+    try {
+      await api.updateLostFoundStatus(id, status);
+      onRefresh();
+    } catch (error) {
+      console.error("Failed to update status:", error);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  // Get unique stations from items
+  const stations = [...new Set(items.map((item) => item.station))].sort();
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Total Reports" value={items.length} color="bg-primary" />
+        <StatCard label="Open Items" value={openItems} color="bg-warning" />
+        <StatCard label="Found Items" value={matchedItems} color="bg-success" />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <select
+          value={filterStation}
+          onChange={(e) => setFilterStation(e.target.value)}
+          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+        >
+          <option value="">All stations</option>
+          {stations.map((station) => (
+            <option key={station} value={station}>{station}</option>
+          ))}
+        </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+        >
+          <option value="">All statuses</option>
+          <option value="open">Open</option>
+          <option value="matched">Found</option>
+        </select>
+        <span className="self-center text-sm text-muted-foreground">
+          {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* Items table */}
+      {filtered.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          No lost & found reports yet.
+        </p>
+      ) : (
+        <div className="rounded-md border border-border bg-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+              <tr>
+                <Th>Item</Th><Th>Station</Th><Th>Date</Th><Th>Contact</Th>
+                <Th>Reference</Th><Th>Status</Th><Th>Reported</Th><Th>Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item) => (
+                <tr key={item.id} className="border-t border-border hover:bg-secondary/30">
+                  <Td><span className="font-medium">{item.item}</span></Td>
+                  <Td>{item.station}</Td>
+                  <Td>{new Date(item.date).toLocaleDateString("en-ZA")}</Td>
+                  <Td><span className="text-xs text-muted-foreground">{item.contact}</span></Td>
+                  <Td><code className="text-xs bg-secondary px-1 py-0.5 rounded">{item.contact_ref}</code></Td>
+                  <Td>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      item.status === "matched"
+                        ? "bg-success/15 text-success"
+                        : "bg-warning/20 text-foreground"
+                    }`}>
+                      {item.status === "matched" ? "Found" : "Open"}
+                    </span>
+                  </Td>
+                  <Td>{new Date(item.created_at).toLocaleDateString("en-ZA", { dateStyle: "short" })}</Td>
+                  <Td>
+                    <div className="flex gap-1">
+                      {item.status === "open" && (
+                        <button
+                          disabled={updating === item.id}
+                          onClick={() => updateStatus(item.id, "matched")}
+                          className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50"
+                        >
+                          Mark Found
+                        </button>
+                      )}
+                      {item.status === "matched" && (
+                        <button
+                          disabled={updating === item.id}
+                          onClick={() => updateStatus(item.id, "open")}
+                          className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50"
+                        >
+                          Reopen
+                        </button>
+                      )}
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
