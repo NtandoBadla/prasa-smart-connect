@@ -1,6 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
-import mapStyles from "@/lib/mapStyles";
+
+const mapStyles: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9d8f0" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4a90d9" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#dadada" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#f8c967" }] },
+  { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#4a4a4a" }] },
+  { featureType: "transit.station.rail", elementType: "labels.icon", stylers: [{ color: "#0000ff" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c8e6c9" }] },
+  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+];
 
 
 export const Route = createFileRoute("/map")({
@@ -84,7 +98,15 @@ function MapPage() {
 
   return (
     <div className="relative h-screen w-full">
-      
+      {/* Search Controls */}
+      <div className="absolute left-1/2 top-4 z-10 w-[90%] max-w-md -translate-x-1/2 rounded-lg bg-white p-3 shadow-lg">
+        <input
+          id="place-autocomplete"
+          type="text"
+          placeholder="Search train stations..."
+          className="h-10 w-full rounded border border-gray-300 px-3 outline-none"
+        />
+      </div>
 
       {/* Google Map */}
       <div ref={mapRef} className="h-full w-full" style={{ zIndex: 0 }} />
