@@ -99,14 +99,7 @@ function MapPage() {
   return (
     <div className="relative h-screen w-full">
       {/* Search Controls */}
-      <div className="absolute left-1/2 top-4 z-10 w-[90%] max-w-md -translate-x-1/2 rounded-lg bg-white p-3 shadow-lg">
-        <input
-          id="place-autocomplete"
-          type="text"
-          placeholder="Search train stations..."
-          className="h-10 w-full rounded border border-gray-300 px-3 outline-none"
-        />
-      </div>
+      
 
       {/* Google Map */}
       <div ref={mapRef} className="h-full w-full" style={{ zIndex: 0 }} />
