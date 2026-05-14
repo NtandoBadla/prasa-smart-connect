@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
 import { api } from "@/lib/api";
-import { Ticket, Search, Calendar, Train } from "lucide-react";
+import { downloadTicketPDF } from "@/lib/ticketPDF";
+import { Ticket, Search, Calendar, Train, Download } from "lucide-react";
 
 export const Route = createFileRoute("/tickets")({
   head: () => ({
@@ -26,6 +27,23 @@ type TicketRecord = {
   travel_class: string;
   booked_at: string;
 };
+
+async function downloadTicket(t: TicketRecord) {
+  await downloadTicketPDF({
+    ref: t.ticket_ref,
+    from: t.from_station,
+    to: t.to_station,
+    trainNo: t.train_no,
+    line: t.line,
+    departure: t.departure,
+    arrival: t.arrival,
+    travelClass: t.travel_class,
+    ticketType: "Single",
+    fare: t.fare,
+    bookedAt: new Date(t.booked_at).toLocaleString("en-ZA"),
+    validDate: new Date(t.booked_at).toLocaleDateString("en-ZA"),
+  });
+}
 
 function TicketsPage() {
   const [userId, setUserId] = useState("");
@@ -110,9 +128,17 @@ function TicketsPage() {
                   <Stat label="Fare" value={`R ${t.fare.toFixed(2)}`} />
                 </div>
 
-                <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  Booked {new Date(t.booked_at).toLocaleString("en-ZA")}
+                <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    Booked {new Date(t.booked_at).toLocaleString("en-ZA")}
+                  </div>
+                  <button
+                    onClick={() => downloadTicket(t)}
+                    className="inline-flex items-center gap-1 rounded-sm border border-primary px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+                  >
+                    <Download className="h-3 w-3" /> Download PDF
+                  </button>
                 </div>
               </article>
             ))}

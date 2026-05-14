@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
 import { STATIONS, searchTrains } from "@/data/prasa";
 import { TICKET_TYPES, CLASS_MULTIPLIER, calcFare, type TicketTypeId, type TravelClass } from "@/data/extras";
+import { downloadTicketPDF } from "@/lib/ticketPDF";
 import { Ticket, QrCode, Download } from "lucide-react";
 
 export const Route = createFileRoute("/fares")({
@@ -26,7 +27,8 @@ function FaresPage() {
   const [cls, setCls] = useState<TravelClass>("Metro");
   const [generated, setGenerated] = useState(false);
 
-  const baseFare = useMemo(() => searchTrains(from, to)[0]?.fare ?? 0, [from, to]);
+  const matchedTrain = useMemo(() => searchTrains(from, to)[0] ?? null, [from, to]);
+  const baseFare = matchedTrain?.fare ?? 0;
   const total = baseFare ? calcFare(baseFare, ticket, cls) : 0;
 
   return (
@@ -131,7 +133,7 @@ function FaresPage() {
             )}
           </div>
 
-          {generated && baseFare > 0 && <ETicket from={from} to={to} cls={cls} ticket={ticket} total={total} />}
+          {generated && baseFare > 0 && <ETicket from={from} to={to} cls={cls} ticket={ticket} total={total} train={matchedTrain} />}
         </div>
       </section>
 
@@ -150,8 +152,32 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function ETicket({ from, to, cls, ticket, total }: { from: string; to: string; cls: TravelClass; ticket: TicketTypeId; total: number }) {
+function ETicket({ from, to, cls, ticket, total, train }: {
+  from: string; to: string; cls: TravelClass; ticket: TicketTypeId; total: number;
+  train: import("@/data/prasa").TrainSchedule | null;
+}) {
   const ref = `MR${Date.now().toString().slice(-8)}`;
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    setDownloading(true);
+    await downloadTicketPDF({
+      ref,
+      from,
+      to,
+      trainNo:    train?.trainNo,
+      line:       train?.line,
+      departure:  train?.departure,
+      arrival:    train?.arrival,
+      travelClass: cls,
+      ticketType: TICKET_TYPES.find((t) => t.id === ticket)?.label,
+      fare: total,
+      bookedAt: new Date().toLocaleString("en-ZA"),
+      validDate: new Date().toLocaleDateString("en-ZA"),
+    });
+    setDownloading(false);
+  }
+
   return (
     <div className="overflow-hidden rounded-md border-2 border-dashed border-primary bg-card shadow-elevated">
       <div className="flex items-center justify-between bg-primary px-5 py-3 text-primary-foreground">
@@ -165,6 +191,9 @@ function ETicket({ from, to, cls, ticket, total }: { from: string; to: string; c
         <div className="space-y-2 text-sm">
           <Row label="From" value={from} />
           <Row label="To" value={to} />
+          {train && <Row label="Train" value={`#${train.trainNo} · ${train.line}`} />}
+          {train && <Row label="Departs" value={train.departure} />}
+          {train && <Row label="Arrives" value={train.arrival} />}
           <Row label="Class" value={cls} />
           <Row label="Type" value={TICKET_TYPES.find((t) => t.id === ticket)?.label || ""} />
           <Row label="Total" value={`R ${total.toFixed(2)}`} bold />
@@ -174,8 +203,12 @@ function ETicket({ from, to, cls, ticket, total }: { from: string; to: string; c
       </div>
       <div className="flex items-center justify-between border-t border-border bg-secondary/40 px-5 py-3 text-xs text-muted-foreground">
         <span>Show this code at the gate.</span>
-        <button className="inline-flex items-center gap-1 font-semibold text-primary hover:underline" onClick={() => window.print()}>
-          <Download className="h-3.5 w-3.5" /> Save / print
+        <button
+          disabled={downloading}
+          onClick={handleDownload}
+          className="inline-flex items-center gap-1 font-semibold text-primary hover:underline disabled:opacity-50"
+        >
+          <Download className="h-3.5 w-3.5" /> {downloading ? "Generating…" : "Download PDF"}
         </button>
       </div>
     </div>
@@ -191,7 +224,7 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
   );
 }
 
-// Deterministic faux-QR
+// Deterministic faux-QR for the on-screen preview only
 function FakeQR({ seed }: { seed: string }) {
   const size = 21;
   let s = 0;
