@@ -42,41 +42,41 @@ function MapPage() {
       transitLayer.setMap(map);
 
       // Search box
-      const input = document.getElementById(
-        "place-autocomplete"
-      ) as HTMLInputElement;
+      // const input = document.getElementById(
+      //   "place-autocomplete"
+      // ) as HTMLInputElement;
 
-      const autocomplete =
-        new window.google.maps.places.Autocomplete(input, {
-          types: ["geocode", "establishment"],
-          componentRestrictions: { country: "za" },
-        });
+      // const autocomplete =
+      //   new window.google.maps.places.Autocomplete(input, {
+      //     types: ["geocode", "establishment"],
+      //     componentRestrictions: { country: "za" },
+      //   });
 
-      const marker = new window.google.maps.Marker({
-        map,
-      });
+      // const marker = new window.google.maps.Marker({
+      //   map,
+      // });
 
-      const infoWindow = new window.google.maps.InfoWindow();
+      // const infoWindow = new window.google.maps.InfoWindow();
 
-      autocomplete.addListener("place_changed", () => {
-        const place = autocomplete.getPlace();
+      // autocomplete.addListener("place_changed", () => {
+      //   const place = autocomplete.getPlace();
 
-        if (!place.geometry || !place.geometry.location) return;
+      //   if (!place.geometry || !place.geometry.location) return;
 
-        map.setCenter(place.geometry.location);
-        map.setZoom(15);
+      //   map.setCenter(place.geometry.location);
+      //   map.setZoom(15);
 
-        marker.setPosition(place.geometry.location);
+      //   marker.setPosition(place.geometry.location);
 
-        infoWindow.setContent(`
-          <div>
-            <strong>${place.name}</strong>
-            <p>${place.formatted_address || ""}</p>
-          </div>
-        `);
+      //   infoWindow.setContent(`
+      //     <div>
+      //       <strong>${place.name}</strong>
+      //       <p>${place.formatted_address || ""}</p>
+      //     </div>
+      //   `);
 
-        infoWindow.open(map, marker);
-      });
+      //   infoWindow.open(map, marker);
+      // });
     };
 
     loadMap();

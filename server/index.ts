@@ -13,7 +13,6 @@ const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_SERVICE_KEY &&
   !process.env.SUPABASE_SERVICE_KEY.includes("REPLACE");
 
-// ── Modular routes ────────────────────────────────────────────────────────────
 import registerRouter from "./routes/register";
 import subscribeRouter from "./routes/subscribe";
 import adminUpdateRouter from "./routes/adminUpdate";
@@ -24,7 +23,6 @@ import lostFoundRouter from "./routes/lostFound";
 import safetyRouter from "./routes/safety";
 import stationSearchRouter from "./routes/stationSearch";
 
-// ── In-memory store (schedules / alerts / news) ───────────────────────────────
 import { SCHEDULES as SEED_SCHEDULES, ALERTS as SEED_ALERTS } from "../src/data/prasa";
 import type { TrainSchedule, ServiceAlert } from "../src/data/prasa";
 import type { NewsItem } from "../src/data/extras";
@@ -39,15 +37,10 @@ let news: NewsItem[] = [
   { id: "n4", title: "Statement on weekend Southern Line works", excerpt: "Engineering teams will be on site this weekend at Muizenberg. Bus shuttles will be deployed between Muizenberg and Fish Hoek.", category: "Press", date: "2025-04-04" },
 ];
 
-// ── App setup ─────────────────────────────────────────────────────────────────
 const app = express();
-app.use(cors({
-  origin: (origin, cb) => cb(null, true), // allow all localhost origins in dev
-  credentials: true,
-}));
+app.use(cors({ origin: (origin, cb) => cb(null, true), credentials: true }));
 app.use(express.json());
 
-// ── JWT-style token auth (stateless) ─────────────────────────────────────────
 const ADMIN_USER = process.env.ADMIN_USER ?? "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS ?? "prasa2025";
 const JWT_SECRET = process.env.ADMIN_JWT_SECRET ?? "prasa-secret-change-me";
@@ -79,37 +72,37 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// ── Auth routes ───────────────────────────────────────────────────────────────
 app.post("/api/admin/login", (req, res) => {
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: "Username and password required" }); return; }
   if (username === ADMIN_USER && password === ADMIN_PASS) {
-    const token = signToken(`${randomUUID()}.${Date.now()}`);
-    res.json({ token });
+    res.json({ token: signToken(`${randomUUID()}.${Date.now()}`) });
   } else {
     res.status(401).json({ error: "Invalid credentials" });
   }
 });
 
-app.post("/api/admin/logout", (_req, res) => {
-  // Stateless — client discards the token
-  res.json({ ok: true });
+app.post("/api/admin/logout", (_req, res) => res.json({ ok: true }));
+
+app.get("/api/schedules", (_req, res) => res.json(schedules));
+app.get("/api/alerts",   (_req, res) => res.json(alerts));
+app.get("/api/news",     (_req, res) => res.json(news));
+
+app.use("/api/register",     registerRouter);
+app.use("/api/subscribe",    subscribeRouter);
+app.use("/api/admin/update", requireAuth, adminUpdateRouter);
+app.use("/api/chatbot",      chatbotRouter);
+app.use("/api/tickets",      ticketsRouter);
+app.use("/api/sentiment",    sentimentRouter);
+app.use("/api/lost-found",   lostFoundRouter);
+app.use("/api/safety",       safetyRouter);
+app.use("/api/stations",     stationSearchRouter);
+
+app.get("/api/live-trains", async (_req, res) => {
+  const { trains } = await runScrape().catch(() => ({ trains: [] }));
+  res.json(trains);
 });
 
-// ── Public data routes ────────────────────────────────────────────────────────
-app.get("/api/schedules", (_req, res) => res.json(schedules));
-app.get("/api/alerts", (_req, res) => res.json(alerts));
-app.get("/api/news", (_req, res) => res.json(news));
-
-// ── New modular routes ────────────────────────────────────────────────────────
-app.use("/api/register", registerRouter);
-app.use("/api/subscribe", subscribeRouter);
-app.use("/api/admin/update", requireAuth, adminUpdateRouter);
-app.use("/api/chatbot", chatbotRouter);
-app.use("/api/tickets", ticketsRouter);
-app.use("/api/sentiment", sentimentRouter);
-
-// ── Coach feedback (sentiment submissions from crowding page) ──────────────────
 app.post("/api/coach-feedback", async (req, res) => {
   const { train_no, line, from_station, to_station, coach, feedback_text,
           hf_label, hf_confidence, vader_label, vader_compound, travel_time } = req.body;
@@ -120,20 +113,15 @@ app.post("/api/coach-feedback", async (req, res) => {
     vader_label, vader_compound: Number(vader_compound),
     travel_time, submitted_at: new Date().toISOString(),
   });
-  if (error) { console.error("coach_feedback insert:", error.message); res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ ok: true });
 });
 
 app.get("/api/coach-feedback", requireAuth, async (_req, res) => {
-  const { data, error } = await supabase
-    .from("coach_feedback")
-    .select("*")
-    .order("submitted_at", { ascending: false })
-    .limit(200);
+  const { data, error } = await supabase.from("coach_feedback").select("*").order("submitted_at", { ascending: false }).limit(200);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(data ?? []);
 });
-
 
 app.post("/api/hf-proxy", async (req, res) => {
   const hfKey = process.env.HUGGINGFACE_API_KEY;
@@ -141,78 +129,32 @@ app.post("/api/hf-proxy", async (req, res) => {
   try {
     const hfRes = await fetch(
       "https://router.huggingface.co/hf-inference/models/j-hartmann/emotion-english-distilroberta-base",
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${hfKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(req.body),
-      }
+      { method: "POST", headers: { Authorization: `Bearer ${hfKey}`, "Content-Type": "application/json" }, body: JSON.stringify(req.body) }
     );
-    const data = await hfRes.json();
-    res.status(hfRes.status).json(data);
-  } catch (err) {
+    res.status(hfRes.status).json(await hfRes.json());
+  } catch {
     res.status(500).json({ error: "HF request failed" });
   }
 });
-app.use("/api/lost-found", lostFoundRouter);
-app.use("/api/safety", safetyRouter);
-app.use("/api/stations", stationSearchRouter);
 
-// GET /api/live-trains — serve scraped live trains
-app.get("/api/live-trains", async (_req, res) => {
-  const { trains } = await runScrape().catch(() => ({ trains: [] }));
-  res.json(trains);
-});
-
-// ── Admin: Lost & Found ────────────────────────────────────────────────────────
 app.get("/api/admin/lost-found", requireAuth, async (_req, res) => {
   if (!isSupabaseConfigured()) { res.json([]); return; }
-  const { data, error } = await supabase
-    .from("lost_found")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.error("Lost & found fetch error:", error.message);
-    res.status(500).json({ error: "Failed to fetch lost & found items" });
-    return;
-  }
+  const { data, error } = await supabase.from("lost_found").select("*").order("created_at", { ascending: false });
+  if (error) { res.status(500).json({ error: "Failed to fetch lost & found items" }); return; }
   res.json(data ?? []);
 });
 
 app.patch("/api/admin/lost-found/:id", requireAuth, async (req, res) => {
   if (!isSupabaseConfigured()) { res.status(503).json({ error: "Database not configured" }); return; }
   const { status } = req.body as { status: "open" | "matched" };
-  if (!["open", "matched"].includes(status)) {
-    res.status(400).json({ error: "status must be open or matched" });
-    return;
-  }
+  if (!["open", "matched"].includes(status)) { res.status(400).json({ error: "status must be open or matched" }); return; }
 
-  // Get the item details first
-  const { data: item, error: fetchError } = await supabase
-    .from("lost_found")
-    .select("*")
-    .eq("id", req.params.id)
-    .single();
+  const { data: item, error: fetchError } = await supabase.from("lost_found").select("*").eq("id", req.params.id).single();
+  if (fetchError || !item) { res.status(404).json({ error: "Item not found" }); return; }
 
-  if (fetchError || !item) {
-    res.status(404).json({ error: "Item not found" });
-    return;
-  }
+  const { data, error } = await supabase.from("lost_found").update({ status }).eq("id", req.params.id).select("*").single();
+  if (error) { res.status(500).json({ error: "Failed to update item" }); return; }
 
-  // Update the status
-  const { data, error } = await supabase
-    .from("lost_found")
-    .update({ status })
-    .eq("id", req.params.id)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("Lost & found update error:", error.message);
-    res.status(500).json({ error: "Failed to update item" });
-    return;
-  }
-
-  // If status changed to "matched", send email notification to user
   if (status === "matched" && item.status !== "matched") {
     try {
       await sendEmail({
@@ -225,32 +167,21 @@ app.patch("/api/admin/lost-found/:id", requireAuth, async (req, res) => {
           contact_ref: item.contact_ref,
           item: item.item,
           station: item.station,
-          date: new Date(item.date).toLocaleDateString('en-ZA'),
-          found_date: new Date().toLocaleDateString('en-ZA')
-        }
+          date: new Date(item.date).toLocaleDateString("en-ZA"),
+          found_date: new Date().toLocaleDateString("en-ZA"),
+        },
       });
-      console.log(`Sent found item notification to ${item.contact} for ref ${item.contact_ref}`);
     } catch (emailError) {
-      console.error("Failed to send found item notification:", emailError);
-      // Don't fail the request if email fails
+      console.error("Failed to send found item notification:", (emailError as Error).message);
     }
   }
-
   res.json(data);
 });
 
-// Admin-only: read safety incidents
 app.get("/api/admin/safety", requireAuth, async (_req, res) => {
   if (!isSupabaseConfigured()) { res.json([]); return; }
-  const { data, error } = await supabase
-    .from("safety_incidents")
-    .select("id, type, station, details, status, created_at")
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.error("Safety fetch error:", error.message);
-    res.status(500).json({ error: "Failed to fetch safety incidents" });
-    return;
-  }
+  const { data, error } = await supabase.from("safety_incidents").select("id, type, station, details, status, created_at").order("created_at", { ascending: false });
+  if (error) { res.status(500).json({ error: "Failed to fetch safety incidents" }); return; }
   res.json(data ?? []);
 });
 
@@ -258,25 +189,14 @@ app.patch("/api/admin/safety/:id", requireAuth, async (req, res) => {
   if (!isSupabaseConfigured()) { res.status(503).json({ error: "Database not configured" }); return; }
   const { status } = req.body as { status: string };
   if (!status) { res.status(400).json({ error: "status is required" }); return; }
-  const { data, error } = await supabase
-    .from("safety_incidents")
-    .update({ status })
-    .eq("id", req.params.id)
-    .select("id, type, station, details, status, created_at")
-    .single();
-  if (error) {
-    console.error("Safety update error:", error.message);
-    res.status(500).json({ error: "Failed to update incident" });
-    return;
-  }
+  const { data, error } = await supabase.from("safety_incidents").update({ status }).eq("id", req.params.id).select("id, type, station, details, status, created_at").single();
+  if (error) { res.status(500).json({ error: "Failed to update incident" }); return; }
   res.json(data);
 });
 
-
 app.post("/api/admin/schedules", requireAuth, (req, res) => {
   const item: TrainSchedule = { ...req.body, id: randomUUID() };
-  schedules.push(item);
-  res.status(201).json(item);
+  schedules.push(item); res.status(201).json(item);
 });
 app.put("/api/admin/schedules/:id", requireAuth, (req, res) => {
   const idx = schedules.findIndex((s) => s.id === req.params.id);
@@ -289,11 +209,9 @@ app.delete("/api/admin/schedules/:id", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Admin: Alerts CRUD ────────────────────────────────────────────────────────
 app.post("/api/admin/alerts", requireAuth, (req, res) => {
   const item: ServiceAlert = { ...req.body, id: randomUUID(), postedAt: new Date().toISOString() };
-  alerts.unshift(item);
-  res.status(201).json(item);
+  alerts.unshift(item); res.status(201).json(item);
 });
 app.put("/api/admin/alerts/:id", requireAuth, (req, res) => {
   const idx = alerts.findIndex((a) => a.id === req.params.id);
@@ -306,11 +224,9 @@ app.delete("/api/admin/alerts/:id", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Admin: News CRUD ──────────────────────────────────────────────────────────
 app.post("/api/admin/news", requireAuth, (req, res) => {
   const item: NewsItem = { ...req.body, id: randomUUID() };
-  news.unshift(item);
-  res.status(201).json(item);
+  news.unshift(item); res.status(201).json(item);
 });
 app.put("/api/admin/news/:id", requireAuth, (req, res) => {
   const idx = news.findIndex((n) => n.id === req.params.id);
@@ -323,29 +239,21 @@ app.delete("/api/admin/news/:id", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     supabase: isSupabaseConfigured() ? "connected" : "not configured",
-    emailjs: !!process.env.EMAILJS_SERVICE_ID && !process.env.EMAILJS_SERVICE_ID.includes("REPLACE") ? "configured" : "not configured",
-    serpapi: !!process.env.SERPAPI_KEY && !process.env.SERPAPI_KEY.includes("REPLACE") ? "configured" : "not configured",
-    openai: !!process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("REPLACE") ? "configured" : "not configured",
+    emailjs: !!process.env.EMAILJS_SERVICE_ID ? "configured" : "not configured",
   });
 });
 
-// ── Admin: Subscribers (read from Supabase) ───────────────────────────────────
 app.get("/api/admin/subscribers", requireAuth, async (_req, res) => {
   if (!isSupabaseConfigured()) { res.json([]); return; }
-  const { data, error } = await supabase
-    .from("users")
-    .select("id, email, station, created_at")
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("users").select("id, email, station, created_at").order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: "Failed to fetch subscribers" }); return; }
   res.json(data ?? []);
 });
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
 app.get("/api/admin/stats", requireAuth, async (_req, res) => {
   let totalSubscribers = 0;
   if (isSupabaseConfigured()) {
@@ -354,17 +262,16 @@ app.get("/api/admin/stats", requireAuth, async (_req, res) => {
   }
   res.json({
     totalSchedules: schedules.length,
-    onTime: schedules.filter((s) => s.status === "On Time").length,
-    delayed: schedules.filter((s) => s.status === "Delayed").length,
-    cancelled: schedules.filter((s) => s.status === "Cancelled").length,
-    totalAlerts: alerts.length,
+    onTime:         schedules.filter((s) => s.status === "On Time").length,
+    delayed:        schedules.filter((s) => s.status === "Delayed").length,
+    cancelled:      schedules.filter((s) => s.status === "Cancelled").length,
+    totalAlerts:    alerts.length,
     criticalAlerts: alerts.filter((a) => a.level === "critical").length,
-    totalNews: news.length,
+    totalNews:      news.length,
     totalSubscribers,
   });
 });
 
-// ── Global error handler ──────────────────────────────────────────────────────
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Unhandled error:", err.message);
   res.status(500).json({ error: "Internal server error" });
@@ -373,15 +280,12 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () => {
   console.log(`PRASA API running on http://localhost:${PORT}`);
-  // Run scraper immediately on startup, then every 10 minutes
   runScrape().then(({ trains, notices }) =>
     console.log(`[cron] Initial scrape: ${trains.length} trains, ${notices.length} notices`)
   ).catch(console.error);
   cron.schedule("*/10 * * * *", () => {
     runScrape()
-      .then(({ trains, notices }) =>
-        console.log(`[cron] Scraped: ${trains.length} trains, ${notices.length} notices`)
-      )
+      .then(({ trains, notices }) => console.log(`[cron] Scraped: ${trains.length} trains, ${notices.length} notices`))
       .catch((err) => console.error("[cron] Scrape failed:", err.message));
   });
 });

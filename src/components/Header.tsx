@@ -5,8 +5,7 @@ import { useState } from "react";
 const PRIMARY = [
   { to: "/", label: "Home" },
   { to: "/crowding", label: "Crowding Predictor" },
-  { to: "/map", label: "Map" },
-  { to: "/tracking", label: "Live Trains" },
+  { to: "/map", label: " Live Map" },
   { to: "/register", label: "Get Alerts" },
   
 ] as const;

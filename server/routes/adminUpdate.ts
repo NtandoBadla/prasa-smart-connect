@@ -24,57 +24,64 @@ router.post("/", async (req, res) => {
   let notified = 0;
   let failed = 0;
 
-  if (isSupabaseConfigured()) {
-    const { error: dbErr } = await supabase.from("train_updates").insert({
-      train_no: trainNo,
+  if (!isSupabaseConfigured()) {
+    console.warn("Supabase not configured — update not persisted.");
+    res.json({ message: "Update processed (Supabase not configured).", notified, failed });
+    return;
+  }
+
+  // Save the update record
+  const { error: dbErr } = await supabase.from("train_updates").insert({
+    train_no: trainNo,
+    line,
+    station,
+    status,
+    delay_min: delayMin ?? 0,
+    reason: reason ?? null,
+    updated_at: updatedAt,
+  });
+
+  if (dbErr) {
+    console.error("DB insert error:", dbErr.message);
+    res.status(500).json({ error: "Failed to save update to database." });
+    return;
+  }
+
+  // Query users whose registered station exactly matches the selected station
+  const { data: users, error: usersErr } = await supabase
+    .from("users")
+    .select("email")
+    .eq("station", station);
+
+  if (usersErr) {
+    console.error("Users fetch error:", usersErr.message);
+  }
+
+  const subscribers = (users ?? []).filter((u: any) => !!u.email) as { email: string }[];
+
+  console.log(`[adminUpdate] station="${station}" matched_users=${subscribers.length}`);
+
+  if (subscribers.length > 0) {
+    const result = await notifySubscribers(subscribers, {
+      trainNo,
       line,
       station,
       status,
-      delay_min: delayMin ?? 0,
-      reason: reason ?? null,
-      updated_at: updatedAt,
+      delayMin: delayMin ?? 0,
+      reason,
+      updatedAt: new Date(updatedAt).toLocaleString("en-ZA", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
     });
-
-    if (dbErr) {
-      console.error("DB insert error:", dbErr.message);
-      res.status(500).json({ error: "Failed to save update to database." });
-      return;
-    }
-
-    const { data: subs, error: subErr } = await supabase
-      .from("subscriptions")
-      .select("users(email)")
-      .eq("station", station);
-
-    if (!subErr && subs) {
-      const subscribers = (subs as any[])
-        .map((s) => s.users)
-        .filter(Boolean)
-        .flat() as { email: string }[];
-
-      const result = await notifySubscribers(subscribers, {
-        trainNo,
-        line,
-        station,
-        status,
-        delayMin: delayMin ?? 0,
-        reason,
-        updatedAt: new Date(updatedAt).toLocaleString("en-ZA", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }),
-      });
-      notified = result.sent;
-      failed = result.failed;
-    }
+    notified = result.sent;
+    failed = result.failed;
   } else {
-    console.warn("Supabase not configured — update not persisted.");
+    console.log(`[adminUpdate] No users registered under station="${station}"`);
   }
 
   res.json({
-    message: isSupabaseConfigured()
-      ? "Train update saved and notifications dispatched."
-      : "Update processed (Supabase not configured).",
+    message: "Train update saved and notifications dispatched.",
     notified,
     failed,
   });
