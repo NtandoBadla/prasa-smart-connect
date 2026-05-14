@@ -65,7 +65,7 @@ function HomePage() {
   />
 
   <img
-    src="/new trainImage.png"
+    src="/train_2-removebg-preview.png"
     alt="PRASA train"
     className="relative z-10 w-full max-w-md object-contain drop-shadow-2xl"
   />
