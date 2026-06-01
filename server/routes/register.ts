@@ -17,7 +17,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const { email, station } = parsed.data;
+  const { email, station, phone } = parsed.data;
 
   if (!isSupabaseConfigured()) {
     res.status(503).json({
@@ -28,7 +28,7 @@ router.post("/", async (req, res) => {
 
   const { data, error } = await supabase
     .from("users")
-    .upsert({ email, station }, { onConflict: "email" })
+    .upsert({ email, station, phone: phone ?? null }, { onConflict: "email" })
     .select()
     .single();
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { supabase } from "../db";
 import { TrainUpdateSchema } from "../validate";
-import { notifySubscribers } from "../mailer";
+import { notifySubscribers, sendSms } from "../mailer";
 
 const router = Router();
 
@@ -15,6 +15,8 @@ const isSupabaseConfigured = () =>
 router.post("/", async (req, res) => {
   const parsed = TrainUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
+    console.error("[adminUpdate] Validation failed:", JSON.stringify(parsed.error.flatten().fieldErrors));
+    console.error("[adminUpdate] Received body:", JSON.stringify(req.body));
     res.status(400).json({ error: parsed.error.flatten().fieldErrors });
     return;
   }
@@ -50,14 +52,14 @@ router.post("/", async (req, res) => {
   // Query users whose registered station exactly matches the selected station
   const { data: users, error: usersErr } = await supabase
     .from("users")
-    .select("email")
+    .select("email, phone")
     .eq("station", station);
 
   if (usersErr) {
     console.error("Users fetch error:", usersErr.message);
   }
 
-  const subscribers = (users ?? []).filter((u: any) => !!u.email) as { email: string }[];
+  const subscribers = (users ?? []).filter((u: any) => !!u.email) as { email: string; phone?: string }[];
 
   console.log(`[adminUpdate] station="${station}" matched_users=${subscribers.length}`);
 
@@ -76,6 +78,18 @@ router.post("/", async (req, res) => {
     });
     notified = result.sent;
     failed = result.failed;
+
+    // SMS notifications for users who provided a phone number
+    const smsText = `PRASA Alert: Train ${trainNo} (${line}) at ${station} is ${status}${
+      status === "Delayed" ? ` by ${delayMin ?? 0} min` : ""
+    }${reason ? `. Reason: ${reason}` : ""}.`;
+
+    const smsResults = await Promise.allSettled(
+      subscribers
+        .filter((u) => !!u.phone)
+        .map((u) => sendSms(u.phone!, smsText)),
+    );
+    console.log(`[adminUpdate] SMS results:`, smsResults.map((r) => r.status));
   } else {
     console.log(`[adminUpdate] No users registered under station="${station}"`);
   }

@@ -3,6 +3,7 @@ create table if not exists users (
   id         uuid primary key default gen_random_uuid(),
   email      text not null unique,
   station    text not null,
+  phone      text,
   created_at timestamptz default now()
 );
 

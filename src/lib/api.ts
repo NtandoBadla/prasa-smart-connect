@@ -46,10 +46,10 @@ export const api = {
   logout: () => apiFetch("/admin/logout", { method: "POST" }),
 
   // ── Registration & subscriptions ────────────────────────────────────────────
-  register: (email: string, station: string) =>
+  register: (email: string, station: string, phone?: string) =>
     apiFetch<{ message: string; userId: string }>("/register", {
       method: "POST",
-      body: JSON.stringify({ email, station }),
+      body: JSON.stringify({ email, station, ...(phone ? { phone } : {}) }),
     }),
   subscribe: (email: string, station: string) =>
     apiFetch<{ message: string }>("/subscribe", {

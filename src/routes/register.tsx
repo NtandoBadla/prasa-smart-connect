@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { api } from "@/lib/api";
 import { STATIONS } from "@/data/prasa";
-import { Bell, CheckCircle, Mail, MapPin, Plus } from "lucide-react";
+import { Bell, CheckCircle, Mail, MapPin, Phone, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -17,7 +17,8 @@ export const Route = createFileRoute("/register")({
 });
 
 function RegisterPage() {
-  const [form, setForm] = useState({ email: "", station: "" });
+  const [form, setForm] = useState({ email: "", station: "", phone: "" });
+  const [phoneError, setPhoneError] = useState("");
   const [extraStation, setExtraStation] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -30,7 +31,7 @@ function RegisterPage() {
     setStatus("loading");
     setMessage("");
     try {
-      const res = await api.register(form.email, form.station);
+      const res = await api.register(form.email, form.station, form.phone || undefined);
       setUserId(res.userId);
       setStatus("success");
       setMessage(`Registered! You'll receive updates for ${form.station}.`);
@@ -92,6 +93,26 @@ function RegisterPage() {
               </div>
               <div>
                 <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <Phone className="h-4 w-4" /> Cell number <span className="text-muted-foreground font-normal">(optional — for SMS alerts)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => {
+                    setPhoneError("");
+                    setForm((f) => ({ ...f, phone: e.target.value }));
+                  }}
+                  onBlur={() => {
+                    if (form.phone && !/^(\+27|0)[0-9]{9}$/.test(form.phone.replace(/\s+/g, "")))
+                      setPhoneError("Use format +27XXXXXXXXX or 0XXXXXXXXX (e.g. 0821234567)");
+                  }}
+                  placeholder="0821234567 or +27821234567"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                {phoneError && <p className="mt-1 text-xs text-destructive">{phoneError}</p>}
+              </div>
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-foreground">
                   <MapPin className="h-4 w-4" /> Home station / area
                 </label>
                 <select
@@ -114,7 +135,7 @@ function RegisterPage() {
 
               <button
                 type="submit"
-                disabled={status === "loading"}
+                disabled={status === "loading" || !!phoneError}
                 className="flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
               >
                 <Bell className="h-4 w-4" />
@@ -161,6 +182,7 @@ function RegisterPage() {
             <p className="font-medium text-foreground">What you'll receive:</p>
             <ul className="mt-2 space-y-1">
               <li>• Instant email when a train at your station is delayed or cancelled</li>
+              <li>• SMS alert if you provide a cell number (+27 format)</li>
               <li>• The reason for the disruption (if known)</li>
               <li>• The time the update was posted</li>
               <li>• Alternative train suggestions</li>

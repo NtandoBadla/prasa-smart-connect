@@ -836,7 +836,7 @@ function TrainUpdateTab({ updates, onRefresh }: { updates: TrainUpdateRecord[]; 
     <div className="space-y-6">
       <div className="rounded-md border border-border bg-card p-5">
         <h2 className="mb-4 font-semibold text-foreground">Post train status update</h2>
-        <p className="mb-4 text-sm text-muted-foreground">Subscribers at the selected station will receive an instant email notification.</p>
+        <p className="mb-4 text-sm text-muted-foreground">Subscribers at the selected station will receive an instant email and SMS notification.</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Train Number" value={form.trainNo} onChange={(v) => setForm((f) => ({ ...f, trainNo: v }))} />

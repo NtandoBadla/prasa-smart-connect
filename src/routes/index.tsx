@@ -49,7 +49,7 @@ function HomePage() {
               Plan your Metrorail trip, track trains in real time and get instant service alerts — all in one place.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link to="/tracking" className="inline-flex items-center gap-2 rounded-sm bg-destructive px-5 py-3 text-sm font-semibold text-destructive-foreground hover:opacity-90">
+              <Link to="/map" className="inline-flex items-center gap-2 rounded-sm bg-destructive px-5 py-3 text-sm font-semibold text-destructive-foreground hover:opacity-90">
                 Live trains <ArrowRight className="h-4 w-4" />
               </Link>
               <Link to="/alerts" className="inline-flex items-center gap-2 rounded-sm border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold backdrop-blur hover:bg-white/20">

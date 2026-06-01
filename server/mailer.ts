@@ -1,4 +1,7 @@
 import axios from "axios";
+import { createRequire } from "module";
+const _require = createRequire(import.meta.url);
+const twilio = _require("twilio") as (accountSid: string, authToken: string) => { messages: { create: (opts: { body: string; from: string; to: string }) => Promise<{ sid: string; status: string }> } };
 
 interface NotifyPayload {
   toEmail: string;
@@ -84,6 +87,24 @@ export async function sendNotification(payload: NotifyPayload): Promise<void> {
     },
     { timeout: 8_000 },
   );
+}
+
+export async function sendSms(phone: string, message: string): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_PHONE_NUMBER;
+  if (!accountSid || !authToken || !from) {
+    console.warn("Twilio env vars not set — skipping SMS to", phone);
+    return;
+  }
+  try {
+    const client = twilio(accountSid, authToken);
+    const result = await client.messages.create({ body: message, from, to: phone });
+    console.log(`[SMS] Sent to ${phone}: sid=${result.sid} status=${result.status}`);
+  } catch (err: any) {
+    console.error(`[SMS] Failed to send to ${phone}:`, err?.message ?? err);
+    throw err;
+  }
 }
 
 export async function notifySubscribers(
