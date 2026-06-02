@@ -80,9 +80,11 @@ function AdminDashboard() {
       {/* Sidebar */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
         <div className="flex items-center gap-2 border-b border-border px-4 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-primary">
-            <Train className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img
+            src="/Train Logo.png"
+            alt="PRASA Logo"
+            className="h-10 w-10 object-contain"
+          />
           <span className="font-bold text-foreground">PRASA Admin</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">

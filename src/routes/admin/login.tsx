@@ -32,9 +32,11 @@ function AdminLogin() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm rounded-md border border-border bg-card p-8 shadow-elevated">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-sm bg-primary">
-            <Train className="h-7 w-7 text-primary-foreground" />
-          </div>
+          <img
+            src="/Train Logo.png"
+            alt="PRASA Logo"
+            className="h-16 w-16 object-contain"
+          />
           <h1 className="text-xl font-bold text-foreground">PRASA Admin</h1>
           <p className="text-sm text-muted-foreground">Sign in to manage the network</p>
         </div>
