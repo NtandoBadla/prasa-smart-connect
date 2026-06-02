@@ -1,7 +1,4 @@
 import axios from "axios";
-import { createRequire } from "module";
-const _require = createRequire(import.meta.url);
-const twilio = _require("twilio") as (accountSid: string, authToken: string) => { messages: { create: (opts: { body: string; from: string; to: string }) => Promise<{ sid: string; status: string }> } };
 
 interface NotifyPayload {
   toEmail: string;
@@ -98,6 +95,8 @@ export async function sendSms(phone: string, message: string): Promise<void> {
     return;
   }
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const twilio = require("twilio") as (sid: string, token: string) => { messages: { create: (opts: { body: string; from: string; to: string }) => Promise<{ sid: string; status: string }> } };
     const client = twilio(accountSid, authToken);
     const result = await client.messages.create({ body: message, from, to: phone });
     console.log(`[SMS] Sent to ${phone}: sid=${result.sid} status=${result.status}`);
