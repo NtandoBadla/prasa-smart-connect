@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrackingRouteImport } from './routes/tracking'
+import { Route as TouristRouteImport } from './routes/tourist'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SavedRouteImport } from './routes/saved'
@@ -21,6 +22,7 @@ import { Route as MapRouteImport } from './routes/map'
 import { Route as LostFoundRouteImport } from './routes/lost-found'
 import { Route as FaresRouteImport } from './routes/fares'
 import { Route as CrowdingRouteImport } from './routes/crowding'
+import { Route as CrimeMapRouteImport } from './routes/crime-map'
 import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -30,6 +32,11 @@ import { Route as AdminLoginRouteImport } from './routes/admin/login'
 const TrackingRoute = TrackingRouteImport.update({
   id: '/tracking',
   path: '/tracking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TouristRoute = TouristRouteImport.update({
+  id: '/tourist',
+  path: '/tourist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TicketsRoute = TicketsRouteImport.update({
@@ -87,6 +94,11 @@ const CrowdingRoute = CrowdingRouteImport.update({
   path: '/crowding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrimeMapRoute = CrimeMapRouteImport.update({
+  id: '/crime-map',
+  path: '/crime-map',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AlertsRoute = AlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
@@ -117,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/alerts': typeof AlertsRoute
+  '/crime-map': typeof CrimeMapRoute
   '/crowding': typeof CrowdingRoute
   '/fares': typeof FaresRoute
   '/lost-found': typeof LostFoundRoute
@@ -128,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRoute
+  '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
@@ -135,6 +149,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alerts': typeof AlertsRoute
+  '/crime-map': typeof CrimeMapRoute
   '/crowding': typeof CrowdingRoute
   '/fares': typeof FaresRoute
   '/lost-found': typeof LostFoundRoute
@@ -146,6 +161,7 @@ export interface FileRoutesByTo {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRoute
+  '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin': typeof AdminIndexRoute
@@ -155,6 +171,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/alerts': typeof AlertsRoute
+  '/crime-map': typeof CrimeMapRoute
   '/crowding': typeof CrowdingRoute
   '/fares': typeof FaresRoute
   '/lost-found': typeof LostFoundRoute
@@ -166,6 +183,7 @@ export interface FileRoutesById {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRoute
+  '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
@@ -176,6 +194,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/alerts'
+    | '/crime-map'
     | '/crowding'
     | '/fares'
     | '/lost-found'
@@ -187,6 +206,7 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/tickets'
+    | '/tourist'
     | '/tracking'
     | '/admin/login'
     | '/admin/'
@@ -194,6 +214,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/alerts'
+    | '/crime-map'
     | '/crowding'
     | '/fares'
     | '/lost-found'
@@ -205,6 +226,7 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/tickets'
+    | '/tourist'
     | '/tracking'
     | '/admin/login'
     | '/admin'
@@ -213,6 +235,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/alerts'
+    | '/crime-map'
     | '/crowding'
     | '/fares'
     | '/lost-found'
@@ -224,6 +247,7 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/tickets'
+    | '/tourist'
     | '/tracking'
     | '/admin/login'
     | '/admin/'
@@ -233,6 +257,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   AlertsRoute: typeof AlertsRoute
+  CrimeMapRoute: typeof CrimeMapRoute
   CrowdingRoute: typeof CrowdingRoute
   FaresRoute: typeof FaresRoute
   LostFoundRoute: typeof LostFoundRoute
@@ -244,6 +269,7 @@ export interface RootRouteChildren {
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   TicketsRoute: typeof TicketsRoute
+  TouristRoute: typeof TouristRoute
   TrackingRoute: typeof TrackingRoute
 }
 
@@ -254,6 +280,13 @@ declare module '@tanstack/react-router' {
       path: '/tracking'
       fullPath: '/tracking'
       preLoaderRoute: typeof TrackingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tourist': {
+      id: '/tourist'
+      path: '/tourist'
+      fullPath: '/tourist'
+      preLoaderRoute: typeof TouristRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tickets': {
@@ -333,6 +366,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CrowdingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crime-map': {
+      id: '/crime-map'
+      path: '/crime-map'
+      fullPath: '/crime-map'
+      preLoaderRoute: typeof CrimeMapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/alerts': {
       id: '/alerts'
       path: '/alerts'
@@ -387,6 +427,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   AlertsRoute: AlertsRoute,
+  CrimeMapRoute: CrimeMapRoute,
   CrowdingRoute: CrowdingRoute,
   FaresRoute: FaresRoute,
   LostFoundRoute: LostFoundRoute,
@@ -398,6 +439,7 @@ const rootRouteChildren: RootRouteChildren = {
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   TicketsRoute: TicketsRoute,
+  TouristRoute: TouristRoute,
   TrackingRoute: TrackingRoute,
 }
 export const routeTree = rootRouteImport

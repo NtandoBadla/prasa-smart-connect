@@ -104,6 +104,12 @@ router.post("/", async (req, res) => {
     return;
   }
 
+  // Arrival assistant — next stop, arrival time, platform/exit
+  if (/(next stop|next station|arrival|arriving|platform|exit|which platform|what platform|where.*stop|when.*arrive)/.test(lower)) {
+    res.json({ reply: arrivalAssistantReply(message, trains, from, to) });
+    return;
+  }
+
   if (!apiKey) {
     res.json({ reply: ruleBasedReply(message, trains, notices, adminUpdates) });
     return;
@@ -151,6 +157,90 @@ function detectStations(text: string): { from?: string; to?: string } {
   if (mentioned.length >= 2) return { from: mentioned[0].s, to: mentioned[1].s };
   if (mentioned.length === 1) return { from: mentioned[0].s };
   return {};
+}
+
+// ── Arrival assistant ────────────────────────────────────────────────────────
+function arrivalAssistantReply(message: string, trains: any[], from?: string, to?: string): string {
+  const lower = message.toLowerCase();
+
+  // Try live trains first
+  const relevantLive = trains.filter((t: any) => {
+    const row = `${t.from_station} ${t.to_station} ${t.line}`.toLowerCase();
+    if (from && to) return row.includes(from.toLowerCase()) || row.includes(to.toLowerCase());
+    if (from) return row.includes(from.toLowerCase());
+    if (to) return row.includes(to.toLowerCase());
+    return false;
+  });
+
+  // Fall back to schedule data for stop/platform info
+  const schedule = SCHEDULES.find((s) => {
+    const stops = s.stops.map((x) => x.toLowerCase());
+    if (from && to) {
+      const fi = stops.indexOf(from.toLowerCase());
+      const ti = stops.indexOf(to.toLowerCase());
+      return fi !== -1 && ti !== -1 && fi < ti;
+    }
+    if (from) return stops.includes(from.toLowerCase());
+    if (to) return stops.includes(to.toLowerCase());
+    return false;
+  });
+
+  if (!schedule && relevantLive.length === 0) {
+    return `I couldn't find a matching train for that route. Please specify your departure station — e.g. "Next stop from Cape Town to Claremont".`;
+  }
+
+  const src = schedule;
+  if (src) {
+    const fromIdx = from ? src.stops.map((x) => x.toLowerCase()).indexOf(from.toLowerCase()) : 0;
+    const toIdx   = to   ? src.stops.map((x) => x.toLowerCase()).indexOf(to.toLowerCase())   : src.stops.length - 1;
+
+    // Determine "current" stop (use from or first stop)
+    const currentIdx = Math.max(fromIdx, 0);
+    const nextIdx    = Math.min(currentIdx + 1, src.stops.length - 1);
+    const nextStop   = src.stops[nextIdx];
+    const finalStop  = src.stops[toIdx !== -1 ? toIdx : src.stops.length - 1];
+
+    // Estimate arrival at next stop
+    const perStopMins = Math.round(src.durationMin / (src.stops.length - 1));
+    const stopsRemaining = toIdx - currentIdx;
+    const etaMin = stopsRemaining * perStopMins;
+    const [h, m] = src.departure.split(":").map(Number);
+    const arrivalTotal = h * 60 + m + (currentIdx + 1) * perStopMins;
+    const arrHH = String(Math.floor(arrivalTotal / 60) % 24).padStart(2, "0");
+    const arrMM = String(arrivalTotal % 60).padStart(2, "0");
+
+    // Platform / exit suggestion: platform from schedule
+    const platformInfo = src.platform !== "—" ? `Platform **${src.platform}**` : "check the platform board";
+
+    // Exit side tip — Cape Town terminus always platform side, Southern Line exits vary
+    const exitTip = finalStop === "Cape Town"
+      ? "Exit through the main concourse towards Adderley Street."
+      : finalStop === "Simon's Town"
+        ? "Exit towards the waterfront — follow signs to Jubilee Square."
+        : finalStop === "Stellenbosch"
+          ? "Exit platform left toward Dorp Street and the town centre."
+          : `Exit at ${finalStop} and follow the overhead signs.`;
+
+    let reply = `**Arrival Assistant — Train #${src.trainNo} (${src.line})**\n\n`;
+    reply += `| Detail | Info |\n`;
+    reply += `|--------|------|\n`;
+    reply += `| Next stop | **${nextStop}** |\n`;
+    reply += `| Arrival at next stop | ~${arrHH}:${arrMM} |\n`;
+    reply += `| Your destination | **${finalStop}** |\n`;
+    reply += `| ETA to destination | ~${etaMin} min |\n`;
+    reply += `| Suggested platform | ${platformInfo} |\n`;
+    reply += `\n💡 **Exit tip:** ${exitTip}`;
+
+    if (src.status === "Delayed" && src.delayMin) {
+      reply += `\n\n⚠ This train is currently delayed by **${src.delayMin} minutes**.`;
+    }
+
+    return reply;
+  }
+
+  // Live train fallback
+  const t = relevantLive[0];
+  return `**Live train update:** Train ${t.train_no} (${t.line}) — ${t.from_station} → ${t.to_station}\nStatus: ${t.status}${t.delay_min ? ` (+${t.delay_min}min)` : ""}\n\nFor next stop details please specify both your current station and destination.`;
 }
 
 // ── Safe coach recommendation ─────────────────────────────────────────────────
@@ -201,7 +291,8 @@ function ruleBasedReply(message: string, trains: any[], notices: any[], adminUpd
     reply += `• Live train status — "Status on Northern Line"\n`;
     reply += `• Route info — "Train from Stellenbosch to Cape Town"\n`;
     reply += `• Safe coach — "Safe coach from Khayelitsha"\n`;
-    reply += `• Crowding — "How busy is the Southern Line?"\n\n`;
+    reply += `• Crowding — "How busy is the Southern Line?"\n`;
+    reply += `• Arrival — "Next stop from Cape Town to Claremont"\n\n`;
     if (hasLive) reply += `I currently have **${trains.length}** live train update(s) and **${notices.length}** notice(s).`;
     else reply += `No live data at the moment — try again shortly.`;
     return reply;
@@ -247,6 +338,11 @@ function ruleBasedReply(message: string, trains: any[], notices: any[], adminUpd
     if (lineMatch)   return row.includes(lineMatch.toLowerCase());
     return true;
   });
+
+  // Arrival assistant
+  if (/(next stop|next station|arrival|arriving|platform|exit|which platform|what platform|where.*stop|when.*arrive)/.test(lower)) {
+    return arrivalAssistantReply(message, trains, from, to);
+  }
 
   // Status / delay / cancellation queries
   if (/(delay|cancel|status|disruption|suspend|on time|running|what.*happening|any.*problem|service)/.test(lower)) {

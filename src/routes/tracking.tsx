@@ -6,6 +6,7 @@ import { AlertsBanner } from "@/components/AlertsBanner";
 import { Chatbot } from "@/components/Chatbot";
 import { SCHEDULES } from "@/data/prasa";
 import { Activity, MapPin, Clock, RefreshCw } from "lucide-react";
+import { ShareJourney } from "@/components/ShareJourney";
 
 export const Route = createFileRoute("/tracking")({
   head: () => ({
@@ -102,6 +103,9 @@ function TrackingPage() {
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Now at <strong className="text-foreground">{t.currentStop}</strong></span>
                       <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> ETA {t.eta}m</span>
+                    </div>
+                    <div className="mt-2">
+                      <ShareJourney from={t.from} currentStop={t.currentStop} to={t.to} etaMinutes={t.eta} trainNo={t.trainNo} line={t.line} />
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
                       <div className={`h-full ${tone} transition-all duration-500`} style={{ width: `${pct}%` }} />

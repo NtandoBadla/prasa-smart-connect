@@ -8,6 +8,7 @@ import { RouteSearchForm } from "@/components/RouteSearchForm";
 import { ALERTS, SCHEDULES } from "@/data/prasa";
 import { Train, Sparkles, ShieldCheck, MapPin, Clock, ArrowRight, AlertTriangle, Info, AlertCircle } from "lucide-react";
 import { analyzeWithVader } from "@/lib/vader";
+import { useLang } from "@/lib/i18n";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const navigate = Route.useNavigate();
   const [, setQuick] = useState({ from: "", to: "" });
+  const { t } = useLang();
 
   const handleSearch = (from: string, to: string, time: string) => {
     setQuick({ from, to });
@@ -43,17 +45,17 @@ function HomePage() {
               <Sparkles className="h-3.5 w-3.5" /> AI-powered commute
             </span>
             <h1 className="mt-4 text-4xl font-bold leading-tight md:text-5xl">
-              Move smarter across the <span className="text-destructive">Western Cape</span>.
+              {t("heroTitle").replace("Western Cape", "").trim()} <span className="text-destructive">Western Cape</span>.
             </h1>
             <p className="mt-4 max-w-lg text-base opacity-90 md:text-lg">
-              Plan your Metrorail trip, track trains in real time and get instant service alerts — all in one place.
+              {t("heroSub")}
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/map" className="inline-flex items-center gap-2 rounded-sm bg-destructive px-5 py-3 text-sm font-semibold text-destructive-foreground hover:opacity-90">
-                Live trains <ArrowRight className="h-4 w-4" />
+                {t("liveTrains")} <ArrowRight className="h-4 w-4" />
               </Link>
               <Link to="/alerts" className="inline-flex items-center gap-2 rounded-sm border border-white/30 bg-white/10 px-5 py-3 text-sm font-semibold backdrop-blur hover:bg-white/20">
-                Service alerts
+                {t("serviceAlerts")}
               </Link>
             </div>
           </div>
@@ -86,7 +88,7 @@ function HomePage() {
       <section className="container mx-auto px-4 py-12">
         <div className="flex items-end justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-foreground md:text-3xl">Today's services</h2>
+            <h2 className="text-2xl font-bold text-foreground md:text-3xl">{t("todayServices")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">A snapshot of departures from major stations.</p>
           </div>
           <Link to="/tracking" className="text-sm font-semibold text-primary hover:underline">See all →</Link>

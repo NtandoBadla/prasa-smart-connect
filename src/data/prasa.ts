@@ -1,6 +1,32 @@
 // PRASA Metrorail Western Cape — schedule data
 export type Station = string;
 
+export const STATION_COORDS: Record<string, { lat: number; lng: number }> = {
+  "Cape Town":       { lat: -33.9258, lng: 18.4232 },
+  "Woodstock":       { lat: -33.9274, lng: 18.4399 },
+  "Salt River":      { lat: -33.9298, lng: 18.4648 },
+  "Observatory":     { lat: -33.9375, lng: 18.4724 },
+  "Mowbray":         { lat: -33.9436, lng: 18.4730 },
+  "Rondebosch":      { lat: -33.9565, lng: 18.4738 },
+  "Newlands":        { lat: -33.9701, lng: 18.4669 },
+  "Claremont":       { lat: -33.9813, lng: 18.4677 },
+  "Wynberg":         { lat: -33.9976, lng: 18.4680 },
+  "Retreat":         { lat: -34.0298, lng: 18.4856 },
+  "Muizenberg":      { lat: -34.0979, lng: 18.4716 },
+  "Fish Hoek":       { lat: -34.1357, lng: 18.4261 },
+  "Simon's Town":    { lat: -34.1882, lng: 18.4278 },
+  "Bellville":       { lat: -33.9001, lng: 18.6295 },
+  "Parow":           { lat: -33.9052, lng: 18.5986 },
+  "Goodwood":        { lat: -33.9044, lng: 18.5604 },
+  "Khayelitsha":     { lat: -34.0411, lng: 18.6726 },
+  "Mitchells Plain": { lat: -34.0334, lng: 18.6241 },
+  "Philippi":        { lat: -33.9981, lng: 18.5896 },
+  "Nyanga":          { lat: -33.9851, lng: 18.5556 },
+  "Langa":           { lat: -33.9491, lng: 18.5259 },
+  "Pinelands":       { lat: -33.9372, lng: 18.5074 },
+  "Stellenbosch":    { lat: -33.9355, lng: 18.8605 },
+};
+
 export interface TrainSchedule {
   id: string;
   trainNo: string;

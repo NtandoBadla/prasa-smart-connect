@@ -87,21 +87,21 @@ export async function sendNotification(payload: NotifyPayload): Promise<void> {
 }
 
 export async function sendSms(phone: string, message: string): Promise<void> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_PHONE_NUMBER;
-  if (!accountSid || !authToken || !from) {
-    console.warn("Twilio env vars not set — skipping SMS to", phone);
+  const apiKey   = process.env.TEXTBEE_API_KEY;
+  const deviceId = process.env.TEXTBEE_DEVICE_ID;
+  if (!apiKey || !deviceId) {
+    console.warn("TextBee env vars not set — skipping SMS to", phone);
     return;
   }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const twilio = require("twilio") as (sid: string, token: string) => { messages: { create: (opts: { body: string; from: string; to: string }) => Promise<{ sid: string; status: string }> } };
-    const client = twilio(accountSid, authToken);
-    const result = await client.messages.create({ body: message, from, to: phone });
-    console.log(`[SMS] Sent to ${phone}: sid=${result.sid} status=${result.status}`);
+    await axios.post(
+      `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`,
+      { receivers: [phone], message },
+      { headers: { "x-api-key": apiKey }, timeout: 10_000 },
+    );
+    console.log(`[SMS] Sent via TextBee to ${phone}`);
   } catch (err: any) {
-    console.error(`[SMS] Failed to send to ${phone}:`, err?.message ?? err);
+    console.error(`[SMS] TextBee failed for ${phone}:`, err?.message ?? err);
     throw err;
   }
 }

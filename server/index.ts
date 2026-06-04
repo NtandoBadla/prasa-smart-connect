@@ -123,6 +123,24 @@ app.get("/api/coach-feedback", requireAuth, async (_req, res) => {
   res.json(data ?? []);
 });
 
+// Public aggregated hotspot data for crime map (no auth — no PII exposed)
+app.get("/api/hotspot-data", async (_req, res) => {
+  if (!isSupabaseConfigured()) { res.json({ feedback: [], incidents: [] }); return; }
+  const [feedbackRes, incidentsRes] = await Promise.all([
+    supabase.from("coach_feedback")
+      .select("from_station, to_station, vader_compound, vader_label, hf_label, hf_confidence, submitted_at")
+      .order("submitted_at", { ascending: false })
+      .limit(500),
+    supabase.from("safety_incidents")
+      .select("station, type, status, created_at")
+      .order("created_at", { ascending: false }),
+  ]);
+  res.json({
+    feedback: feedbackRes.data ?? [],
+    incidents: incidentsRes.data ?? [],
+  });
+});
+
 app.post("/api/hf-proxy", async (req, res) => {
   const hfKey = process.env.HUGGINGFACE_API_KEY;
   if (!hfKey) { res.status(500).json({ error: "HF key not configured" }); return; }

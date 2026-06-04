@@ -1,4 +1,6 @@
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { LangContext, T, type Lang } from "@/lib/i18n";
 
 function NotFoundComponent() {
   return (
@@ -22,7 +24,18 @@ function NotFoundComponent() {
   );
 }
 
+function Root() {
+  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("lang") as Lang) ?? "en");
+  const t = (key: string) => T[lang][key] ?? T["en"][key] ?? key;
+  const handleSetLang = (l: Lang) => { setLang(l); localStorage.setItem("lang", l); };
+  return (
+    <LangContext.Provider value={{ lang, setLang: handleSetLang, t }}>
+      <Outlet />
+    </LangContext.Provider>
+  );
+}
+
 export const Route = createRootRoute({
-  component: () => <Outlet />,
+  component: Root,
   notFoundComponent: NotFoundComponent,
 });

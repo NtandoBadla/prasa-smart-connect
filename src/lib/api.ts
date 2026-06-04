@@ -180,6 +180,26 @@ export const api = {
   addTimetableEntry: (data: object) =>
     apiFetch<Record<string, unknown>>("/tickets/timetable", { method: "POST", body: JSON.stringify(data) }),
 
+  // ── Crime Hotspot (public — no auth) ───────────────────────────────────────────
+  hotspotData: () =>
+    apiFetch<{
+      feedback: {
+        from_station: string;
+        to_station: string;
+        vader_compound: number;
+        vader_label: string;
+        hf_label: string;
+        hf_confidence: number;
+        submitted_at: string;
+      }[];
+      incidents: {
+        station: string;
+        type: string;
+        status: string;
+        created_at: string;
+      }[];
+    }>("/hotspot-data"),
+
   // ── Coach Feedback ──────────────────────────────────────────────────────────
   coachFeedback: () =>
     apiFetch<{

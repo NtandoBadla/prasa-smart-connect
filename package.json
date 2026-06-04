@@ -80,7 +80,6 @@
     "tailwindcss": "^4.2.1",
     "tsx": "^4.21.0",
     "tw-animate-css": "^1.3.4",
-    "twilio": "^6.0.2",
     "vader-sentiment": "^1.1.3",
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^6.0.2",
