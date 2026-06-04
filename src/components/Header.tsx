@@ -24,7 +24,6 @@ export function Header() {
     { to: "/safety", label: t("safety") },
     { to: "/lost-found", label: t("lostFound") },
     { to: "/tourist", label: t("touristMode") },
-    { to: "/crime-map", label: t("crimeMap") },
   ] as const;
 
   return (
