@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Chatbot } from '@/components/Chatbot';
-import { SCHEDULES } from '@/data/prasa';
+import { SCHEDULES, STATIONS } from '@/data/prasa';
 import { getCrowding, bestCoach } from '@/data/extras';
 import { Users, Sparkles, Clock } from 'lucide-react';
 import { analyzeWithVader } from "@/lib/vader";
@@ -45,12 +45,28 @@ type SentimentResult = {
 };
 
 function CrowdingPage() {
-  const [trainId, setTrainId] = useState(SCHEDULES[0].id);
+  const [fromStation, setFromStation] = useState(STATIONS[0]);
+  const [toStation, setToStation]     = useState(STATIONS[1]);
+
+  const filteredSchedules = useMemo(() => {
+    const f = fromStation.toLowerCase();
+    const t = toStation.toLowerCase();
+    return SCHEDULES.filter((s) => {
+      const stops = s.stops.map((x) => x.toLowerCase());
+      const fi = stops.indexOf(f);
+      const ti = stops.indexOf(t);
+      return fi !== -1 && ti !== -1 && fi < ti;
+    });
+  }, [fromStation, toStation]);
+
+  const defaultTrain = filteredSchedules[0] ?? SCHEDULES[0];
+  const [trainId, setTrainId] = useState(defaultTrain.id);
   const [time, setTime] = useState(now24h);
   const [feedback, setFeedback] = useState('');
   const [selectedCoach, setSelectedCoach] = useState(1);
   const [resultsByContext, setResultsByContext] = useState<Record<string, any[]>>({});
-  const train = SCHEDULES.find((s) => s.id === trainId)!;
+
+  const train = SCHEDULES.find((s) => s.id === trainId) ?? defaultTrain;
   const contextKey = `${trainId}-${time}`;
 
   const loads = useMemo(
@@ -215,17 +231,49 @@ const coachSentiment = useMemo(() => {
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">From</label>
+            <select
+              value={fromStation}
+              onChange={(e) => {
+                setFromStation(e.target.value);
+                setSelectedCoach(1);
+                setResultsByContext({});
+              }}
+              className="rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+            >
+              {STATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">To</label>
+            <select
+              value={toStation}
+              onChange={(e) => {
+                setToStation(e.target.value);
+                setSelectedCoach(1);
+                setResultsByContext({});
+              }}
+              className="rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+            >
+              {STATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Train</label>
             <select
               value={trainId}
               onChange={(e) => { setTrainId(e.target.value); setSelectedCoach(1); setResultsByContext({}); }}
               className="rounded-sm border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              disabled={filteredSchedules.length === 0}
             >
-              {SCHEDULES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  #{s.trainNo} - {s.from} to {s.to} - {s.departure}
-                </option>
-              ))}
+              {filteredSchedules.length === 0
+                ? <option>No trains for this route</option>
+                : filteredSchedules.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      #{s.trainNo} · {s.line} · {s.departure}
+                    </option>
+                  ))
+              }
             </select>
           </div>
           <div className="flex flex-col gap-1">
