@@ -123,20 +123,48 @@ app.get("/api/coach-feedback", requireAuth, async (_req, res) => {
   res.json(data ?? []);
 });
 
+// Line stop lists — used to expand feedback to all intermediate stations
+const LINE_STOPS: Record<string, string[]> = {
+  "Southern Line":   ["Cape Town","Woodstock","Salt River","Observatory","Mowbray","Rondebosch","Newlands","Claremont","Wynberg","Retreat","Muizenberg","Fish Hoek","Simon's Town"],
+  "Northern Line":   ["Cape Town","Woodstock","Salt River","Pinelands","Goodwood","Parow","Bellville","Stellenbosch"],
+  "Central Line":    ["Cape Town","Woodstock","Salt River","Langa","Nyanga","Philippi","Mitchells Plain","Khayelitsha"],
+  "Cape Flats Line": ["Cape Town","Salt River","Pinelands","Nyanga","Philippi","Retreat"],
+};
+
+function stopsInRange(line: string, from: string, to: string): string[] {
+  const stops = LINE_STOPS[line];
+  if (!stops) return [from, to].filter(Boolean);
+  const fi = stops.indexOf(from);
+  const ti = stops.indexOf(to);
+  if (fi === -1 || ti === -1) return [from, to].filter(Boolean);
+  const [start, end] = fi <= ti ? [fi, ti] : [ti, fi];
+  return stops.slice(start, end + 1);
+}
+
 // Public aggregated hotspot data for crime map (no auth — no PII exposed)
 app.get("/api/hotspot-data", async (_req, res) => {
   if (!isSupabaseConfigured()) { res.json({ feedback: [], incidents: [] }); return; }
   const [feedbackRes, incidentsRes] = await Promise.all([
     supabase.from("coach_feedback")
-      .select("from_station, to_station, vader_compound, vader_label, hf_label, hf_confidence, submitted_at")
+      .select("from_station, to_station, line, vader_compound, vader_label, hf_label, hf_confidence, submitted_at")
       .order("submitted_at", { ascending: false })
-      .limit(500),
+      .limit(1000),
     supabase.from("safety_incidents")
       .select("station, type, status, created_at")
       .order("created_at", { ascending: false }),
   ]);
+
+  // Expand each feedback row to all affected stations along the route
+  const expanded: typeof feedbackRes.data = [];
+  for (const row of feedbackRes.data ?? []) {
+    const affected = stopsInRange(row.line ?? "", row.from_station, row.to_station);
+    for (const station of affected) {
+      expanded.push({ ...row, from_station: station, to_station: station });
+    }
+  }
+
   res.json({
-    feedback: feedbackRes.data ?? [],
+    feedback: expanded,
     incidents: incidentsRes.data ?? [],
   });
 });

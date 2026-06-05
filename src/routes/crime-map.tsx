@@ -67,16 +67,15 @@ function CrimeMapPage() {
       };
 
       feedback.forEach((f) => {
-        [f.from_station, f.to_station].filter(Boolean).forEach((st) => {
-          touch(st);
-          sentMap[st].compounds.push(f.vader_compound);
-          sentMap[st].total += 1;
-          // Count as negative if VADER says negative OR HF label is negative
-          // AND weight by HF confidence so low-confidence labels matter less
-          const hfIsNeg = f.hf_label === "negative" && f.hf_confidence > 0.5;
-          const vaderIsNeg = f.vader_compound < -0.05;
-          if (hfIsNeg || vaderIsNeg) sentMap[st].negCount += 1;
-        });
+        // Each row is already expanded to a single station (from_station === to_station)
+        const st = f.from_station;
+        if (!st) return;
+        touch(st);
+        sentMap[st].compounds.push(f.vader_compound);
+        sentMap[st].total += 1;
+        const hfIsNeg = f.hf_label === "negative" && f.hf_confidence > 0.5;
+        const vaderIsNeg = f.vader_compound < -0.05;
+        if (hfIsNeg || vaderIsNeg) sentMap[st].negCount += 1;
       });
 
       // ── Build per-station incident aggregates ───────────────────────────────

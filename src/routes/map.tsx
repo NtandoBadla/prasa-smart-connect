@@ -54,16 +54,16 @@ function MapPage() {
       try {
         const { feedback, incidents } = await api.hotspotData();
 
-        // Aggregate sentiment per station
+        // Aggregate sentiment per station (rows already expanded to single station)
         const sentMap: Record<string, { compounds: number[]; negCount: number; total: number }> = {};
         feedback.forEach((f) => {
-          [f.from_station, f.to_station].filter(Boolean).forEach((st) => {
-            if (!sentMap[st]) sentMap[st] = { compounds: [], negCount: 0, total: 0 };
-            sentMap[st].compounds.push(f.vader_compound);
-            sentMap[st].total += 1;
-            if (f.hf_label === "negative" && f.hf_confidence > 0.5 || f.vader_compound < -0.05)
-              sentMap[st].negCount += 1;
-          });
+          const st = f.from_station;
+          if (!st) return;
+          if (!sentMap[st]) sentMap[st] = { compounds: [], negCount: 0, total: 0 };
+          sentMap[st].compounds.push(f.vader_compound);
+          sentMap[st].total += 1;
+          if (f.hf_label === "negative" && f.hf_confidence > 0.5 || f.vader_compound < -0.05)
+            sentMap[st].negCount += 1;
         });
 
         const incMap: Record<string, number> = {};
