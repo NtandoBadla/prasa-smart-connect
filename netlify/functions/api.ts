@@ -439,6 +439,27 @@ app.delete(["/api/admin/news/:id", "/admin/news/:id"], requireAuth, (req, res) =
   res.json({ ok: true });
 });
 
+// ── Live trains (scraped from Supabase — no cron in serverless) ──────────────
+app.get(["/api/live-trains", "/live-trains"], async (_req, res) => {
+  if (!isSupabaseConfigured) { res.json([]); return; }
+  const { data } = await supabase
+    .from("scraped_trains")
+    .select("*")
+    .order("scraped_at", { ascending: false })
+    .limit(100);
+  res.json(data ?? []);
+});
+
+// ── Announcements ─────────────────────────────────────────────────────────────
+app.get(["/api/announcements", "/announcements"], async (_req, res) => {
+  if (!isSupabaseConfigured) { res.json({ notices: [], adminUpdates: [] }); return; }
+  const [noticesRes, updatesRes] = await Promise.all([
+    supabase.from("scraped_notices").select("*").order("scraped_at", { ascending: false }).limit(20),
+    supabase.from("train_updates").select("*").order("updated_at", { ascending: false }).limit(20),
+  ]);
+  res.json({ notices: noticesRes.data ?? [], adminUpdates: updatesRes.data ?? [] });
+});
+
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get(["/api/health", "/health"], (_req, res) => {
   res.json({
