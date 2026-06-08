@@ -9,7 +9,13 @@ import { planTrip, type TripPlan } from "@/data/extras";
 import { SCHEDULES } from "@/data/prasa";
 import { useSavedRoutes } from "@/hooks/useSavedRoutes";
 import { api } from "@/lib/api";
-import { Route as RouteIcon, ArrowDown, Clock, RefreshCw, Ticket, Download, Star, ChevronDown, ChevronUp, Train } from "lucide-react";
+import { Route as RouteIcon, ArrowDown, Clock, RefreshCw, Ticket, Download, Star, ChevronDown, ChevronUp, Train, X, AlertTriangle, Loader2 } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+
+const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
+  : null;
 
 const searchSchema = z.object({
   from: z.string().optional().default(""),
@@ -82,19 +88,76 @@ function downloadTicket(ticket: GeneratedTicket, plan: TripPlan) {
   URL.revokeObjectURL(url);
 }
 
+// ── Stripe payment form (inline) ─────────────────────────────────────────────
+function PlannerStripeForm({
+  fare,
+  onSuccess,
+  onCancel,
+}: {
+  fare: number;
+  onSuccess: (ticket: GeneratedTicket) => void;
+  onCancel: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [paying, setPaying] = useState(false);
+  const [err, setErr] = useState("");
+
+  // paymentIntentId is stored on the Elements context via the clientSecret;
+  // we retrieve it from stripe after confirmation
+  const handlePay = async () => {
+    if (!stripe || !elements) return;
+    setPaying(true);
+    setErr("");
+    try {
+      const { error: submitErr } = await elements.submit();
+      if (submitErr) { setErr(submitErr.message ?? "Validation failed"); return; }
+      const { error, paymentIntent } = await stripe.confirmPayment({ elements, redirect: "if_required" });
+      if (error) { setErr(error.message ?? "Payment failed"); return; }
+      if (paymentIntent?.status === "succeeded") {
+        const ticket = await api.confirmPayment(paymentIntent.id);
+        onSuccess(ticket as unknown as GeneratedTicket);
+      }
+    } catch (e: any) {
+      setErr(e.message ?? "Payment error");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <PaymentElement />
+      {err && <p className="text-sm text-destructive">{err}</p>}
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 rounded-sm border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary">Cancel</button>
+        <button
+          onClick={handlePay}
+          disabled={paying || !stripe}
+          className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ticket className="h-4 w-4" />}
+          {paying ? "Processing…" : `Pay R ${fare.toFixed(2)}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Trip plan card with booking ───────────────────────────────────────────────
 function PlanCard({ plan, index }: { plan: TripPlan; index: number }) {
-  const [booking, setBooking] = useState(false);
   const [ticket, setTicket] = useState<GeneratedTicket | null>(null);
+  const [paymentSecret, setPaymentSecret] = useState<string | null>(null);
+  const [initiating, setInitiating] = useState(false);
   const [error, setError] = useState("");
 
-  async function book() {
-    setBooking(true);
+  async function openPayment() {
+    setInitiating(true);
     setError("");
     try {
       const firstLeg = plan.legs[0].train;
       const lastLeg = plan.legs[plan.legs.length - 1].train;
-      const t = await api.generateTicket({
+      const { clientSecret } = await api.createPaymentIntent({
         trainNo: firstLeg.trainNo,
         line: firstLeg.line,
         from: firstLeg.from,
@@ -104,11 +167,11 @@ function PlanCard({ plan, index }: { plan: TripPlan; index: number }) {
         fare: plan.totalFare,
         travelClass: "Metro",
       });
-      setTicket(t);
-    } catch {
-      setError("Could not generate ticket. Please try again.");
+      setPaymentSecret(clientSecret);
+    } catch (e: any) {
+      setError(e.message ?? "Could not initiate payment.");
     } finally {
-      setBooking(false);
+      setInitiating(false);
     }
   }
 
@@ -182,16 +245,56 @@ function PlanCard({ plan, index }: { plan: TripPlan; index: number }) {
           </p>
         </div>
       ) : (
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            onClick={book}
-            disabled={booking}
-            className="flex items-center gap-2 rounded-sm bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-60"
-          >
-            <Ticket className="h-4 w-4" />
-            {booking ? "Booking…" : "Book & get ticket"}
-          </button>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+        <div className="mt-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={openPayment}
+              disabled={initiating}
+              className="flex items-center gap-2 rounded-sm bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-60"
+            >
+              <Ticket className="h-4 w-4" />
+              {initiating ? "Loading…" : "Book & pay"}
+            </button>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+
+          {/* Payment modal */}
+          {paymentSecret && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-md rounded-md border border-border bg-card p-6 shadow-elevated">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-foreground">Pay for Ticket</h3>
+                  <button onClick={() => setPaymentSecret(null)} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="mb-4 space-y-1 rounded-sm bg-secondary/40 p-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Route</span>
+                    <span className="font-semibold">{plan.legs[0].train.from} → {plan.legs[plan.legs.length - 1].train.to}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Fare</span>
+                    <span className="font-semibold">R {plan.totalFare.toFixed(2)}</span>
+                  </div>
+                </div>
+                {stripePromise ? (
+                  <Elements stripe={stripePromise} options={{ clientSecret: paymentSecret, appearance: { theme: "stripe" } }}>
+                    <PlannerStripeForm
+                      fare={plan.totalFare}
+                      onSuccess={(t) => { setTicket(t); setPaymentSecret(null); }}
+                      onCancel={() => setPaymentSecret(null)}
+                    />
+                  </Elements>
+                ) : (
+                  <div className="rounded-sm border border-warning/40 bg-warning/10 p-3 text-sm">
+                    <AlertTriangle className="inline h-4 w-4 text-warning mr-1" />
+                    Stripe is not configured. Add <code className="text-xs">VITE_STRIPE_PUBLISHABLE_KEY</code> to your .env file.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </li>

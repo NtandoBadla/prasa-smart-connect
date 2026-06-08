@@ -6,6 +6,7 @@ import { Chatbot } from "@/components/Chatbot";
 import { NEWS, type NewsItem } from "@/data/extras";
 import { api } from "@/lib/api";
 import { Newspaper, Calendar, RefreshCw } from "lucide-react";
+import { useLang } from "@/lib/i18n";
 
 export const Route = createFileRoute("/news")({
   head: () => ({
@@ -21,6 +22,7 @@ const CATEGORIES: NewsItem["category"][] = ["Network", "Upgrade", "Community", "
 const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
 function NewsPage() {
+  const { t } = useLang();
   const [active, setActive] = useState<NewsItem["category"] | null>(null);
   const [items, setItems] = useState<NewsItem[]>(NEWS);
   const [loading, setLoading] = useState(false);
@@ -56,9 +58,9 @@ function NewsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="flex items-center gap-2 text-2xl font-bold md:text-3xl">
-                <Newspaper className="h-6 w-6 text-destructive" /> News & announcements
+                <Newspaper className="h-6 w-6 text-destructive" /> {t("newsTitle")}
               </h1>
-              <p className="mt-1 text-sm opacity-90">Press releases, network upgrades and community updates.</p>
+              <p className="mt-1 text-sm opacity-90">{t("newsDesc")}</p>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs opacity-70">
@@ -70,7 +72,7 @@ function NewsPage() {
                 className="flex items-center gap-1.5 rounded-sm border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20 disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
+                {t("refresh")}
               </button>
             </div>
           </div>
@@ -79,7 +81,7 @@ function NewsPage() {
 
       <section className="container mx-auto flex-1 px-4 py-8">
         <div className="mb-5 flex flex-wrap gap-2">
-          <FilterChip label="All" active={!active} onClick={() => setActive(null)} />
+          <FilterChip label={t("all")} active={!active} onClick={() => setActive(null)} />
           {CATEGORIES.map((c) => (
             <FilterChip key={c} label={c} active={active === c} onClick={() => setActive(c)} />
           ))}
@@ -119,7 +121,7 @@ function NewsPage() {
                   rel="noopener noreferrer"
                   className="mt-3 inline-block text-sm font-semibold text-primary hover:underline"
                 >
-                  Read more →
+                  {t("readMore")} →
                 </a>
               </article>
             ))}

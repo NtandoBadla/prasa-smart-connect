@@ -103,6 +103,17 @@ app.get("/api/live-trains", async (_req, res) => {
   res.json(trains);
 });
 
+app.get("/api/announcements", async (_req, res) => {
+  const [{ notices }, updatesRes] = await Promise.all([
+    runScrape().catch(() => ({ notices: [] as any[] })),
+    isSupabaseConfigured()
+      ? supabase.from("train_updates").select("*").order("updated_at", { ascending: false }).limit(20)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const adminUpdates = (updatesRes as any).data ?? [];
+  res.json({ notices, adminUpdates });
+});
+
 app.post("/api/coach-feedback", async (req, res) => {
   const { train_no, line, from_station, to_station, coach, feedback_text,
           hf_label, hf_confidence, vader_label, vader_compound, travel_time } = req.body;

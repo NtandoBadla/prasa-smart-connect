@@ -135,6 +135,32 @@ export const api = {
     apiFetch(`/admin/news/${id}`, { method: "DELETE" }),
 
   // ── Tickets ─────────────────────────────────────────────────────────────────
+  createPaymentIntent: (data: {
+    userId?: string;
+    trainNo: string;
+    line: string;
+    from: string;
+    to: string;
+    departure: string;
+    arrival: string;
+    fare: number;
+    travelClass?: string;
+  }) => apiFetch<{ clientSecret: string; ticketId: string; ticketRef: string }>(
+    "/tickets/create-payment-intent",
+    { method: "POST", body: JSON.stringify(data) },
+  ),
+
+  confirmPayment: (paymentIntentId: string) =>
+    apiFetch<{
+      id: string; ticket_ref: string; qr_token: string;
+      train_no: string; line: string; from_station: string; to_station: string;
+      departure: string; arrival: string; fare: number; travel_class: string; booked_at: string;
+    }>("/tickets/confirm-payment", {
+      method: "POST",
+      body: JSON.stringify({ paymentIntentId }),
+    }),
+
+  // kept for planner page backwards compat
   generateTicket: (data: {
     userId?: string;
     trainNo: string;
@@ -146,23 +172,16 @@ export const api = {
     fare: number;
     travelClass?: string;
   }) => apiFetch<{
-    id: string;
-    ticket_ref: string;
-    train_no: string;
-    line: string;
-    from_station: string;
-    to_station: string;
-    departure: string;
-    arrival: string;
-    fare: number;
-    travel_class: string;
-    booked_at: string;
-  }>("/tickets", { method: "POST", body: JSON.stringify(data) }),
+    id: string; ticket_ref: string; qr_token: string;
+    train_no: string; line: string; from_station: string; to_station: string;
+    departure: string; arrival: string; fare: number; travel_class: string; booked_at: string;
+  }>("/tickets/generate", { method: "POST", body: JSON.stringify(data) }),
 
   ticketHistory: (userId: string) =>
     apiFetch<{
       id: string;
       ticket_ref: string;
+      qr_token: string;
       train_no: string;
       line: string;
       from_station: string;
@@ -171,6 +190,9 @@ export const api = {
       arrival: string;
       fare: number;
       travel_class: string;
+      payment_status: string;
+      used: boolean;
+      used_at: string | null;
       booked_at: string;
     }[]>(`/tickets/${encodeURIComponent(userId)}`),
 
@@ -312,6 +334,12 @@ export const api = {
       reason: string;
       scraped_at: string;
     }[]>("/live-trains"),
+
+  announcements: () =>
+    apiFetch<{
+      notices: { title: string; body: string; line: string; scraped_at: string }[];
+      adminUpdates: { id: string; train_no: string; line: string; station: string; status: string; delay_min: number; reason: string; updated_at: string }[];
+    }>("/announcements"),
 
   reportSafetyIncident: (data: { type: string; station: string; details: string }) =>
     apiFetch<{

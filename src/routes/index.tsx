@@ -1,13 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { AlertsBanner } from "@/components/AlertsBanner";
 import { Chatbot } from "@/components/Chatbot";
-import { RouteSearchForm } from "@/components/RouteSearchForm";
-import { ALERTS, SCHEDULES } from "@/data/prasa";
-import { Train, Sparkles, ShieldCheck, MapPin, Clock, ArrowRight, AlertTriangle, Info, AlertCircle } from "lucide-react";
-import { analyzeWithVader } from "@/lib/vader";
+import { Train, Sparkles, ShieldCheck, MapPin, ArrowRight, AlertCircle, AlertTriangle, Info, Megaphone, RefreshCw } from "lucide-react";
+import { api } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
 
 export const Route = createFileRoute("/")({
@@ -23,14 +21,15 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  const navigate = Route.useNavigate();
-  const [, setQuick] = useState({ from: "", to: "" });
   const { t } = useLang();
-
-  const handleSearch = (from: string, to: string, time: string) => {
-    setQuick({ from, to });
-    navigate({ to: "/search", search: { from, to, time } });
-  };
+  const { data, isLoading } = useQuery({
+    queryKey: ["announcements"],
+    queryFn: api.announcements,
+    refetchInterval: 5 * 60 * 1000,
+  });
+  const notices = data?.notices ?? [];
+  const adminUpdates = data?.adminUpdates ?? [];
+  const total = notices.length + adminUpdates.length;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -78,72 +77,53 @@ function HomePage() {
       {/* Feature strip */}
       <section className="border-b border-border bg-secondary/50">
         <div className="container mx-auto grid gap-6 px-4 py-8 md:grid-cols-3">
-          <Feature icon={<Train className="h-6 w-6" />} title="Smart route search" desc="No more PDFs — search any station to station in seconds." />
-          <Feature icon={<MapPin className="h-6 w-6" />} title="Live train tracking" desc="See on-time and delayed services across all Metrorail lines." />
-          <Feature icon={<ShieldCheck className="h-6 w-6" />} title="AI assistant" desc="Ask anything about trains, fares and routes in natural language." />
+          <Feature icon={<Train className="h-6 w-6" />} title={t("featureSearchTitle")} desc={t("featureSearchDesc")} />
+          <Feature icon={<MapPin className="h-6 w-6" />} title={t("featureTrackTitle")} desc={t("featureTrackDesc")} />
+          <Feature icon={<ShieldCheck className="h-6 w-6" />} title={t("featureAITitle")} desc={t("featureAIDesc")} />
         </div>
       </section>
 
-      {/* Live status preview */}
-      <section className="container mx-auto px-4 py-12">
-        <div className="flex items-end justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground md:text-3xl">{t("todayServices")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">A snapshot of departures from major stations.</p>
-          </div>
-          <Link to="/tracking" className="text-sm font-semibold text-primary hover:underline">See all →</Link>
-        </div>
-        <div className="mt-6 overflow-hidden rounded-md border border-border bg-card shadow-card">
-          <table className="w-full text-sm">
-            <thead className="bg-primary text-primary-foreground">
-              <tr className="text-left">
-                <Th>Train</Th>
-                <Th>Line</Th>
-                <Th>Route</Th>
-                <Th>Depart</Th>
-                <Th>Arrive</Th>
-                <Th>Status</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {SCHEDULES.slice(0, 6).map((t, i) => (
-                <tr key={t.id} className={i % 2 === 0 ? "bg-card" : "bg-secondary/40"}>
-                  <Td className="font-mono">#{t.trainNo}</Td>
-                  <Td>{t.line}</Td>
-                  <Td className="font-medium">{t.from} → {t.to}</Td>
-                  <Td><Clock className="mr-1 inline h-3 w-3" />{t.departure}</Td>
-                  <Td>{t.arrival}</Td>
-                  <Td>
-                    <StatusPill status={t.status} delay={t.delayMin} />
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
-      {/* Alerts preview */}
+      {/* Announcements */}
       <section className="container mx-auto px-4 pb-16">
-        <h2 className="text-2xl font-bold text-foreground md:text-3xl">Service alerts</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Live updates from across the network.</p>
+        <div className="flex items-center gap-2">
+          <Megaphone className="h-5 w-5 text-primary" />
+          <h2 className="text-2xl font-bold text-foreground md:text-3xl">{t("announcements")}</h2>
+          {isLoading && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">{t("announcementsDesc")}</p>
+        {!isLoading && total === 0 && (
+          <p className="mt-6 text-sm text-muted-foreground">{t("noAnnouncements")}</p>
+        )}
         <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {ALERTS.map((a) => {
-            const Icon = a.level === "critical" ? AlertCircle : a.level === "warning" ? AlertTriangle : Info;
-            const tone =
-              a.level === "critical"
-                ? "border-destructive/40 bg-destructive/5"
-                : a.level === "warning"
-                  ? "border-warning/40 bg-warning/10"
-                  : "border-border bg-secondary/40";
+          {adminUpdates.map((u) => (
+            <article key={u.id} className="rounded-md border border-warning/40 bg-warning/10 p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{u.line}</span>
+              </div>
+              <h3 className="mt-2 font-semibold text-foreground">Train #{u.train_no} — {u.status}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {u.station}{u.delay_min ? ` · +${u.delay_min} min delay` : ""}{u.reason ? ` — ${u.reason}` : ""}
+              </p>
+            </article>
+          ))}
+          {notices.map((n, i) => {
+            const isAlert = /(cancel|suspend|no service)/i.test(n.body);
+            const isWarning = /(delay|late|slow)/i.test(n.body);
+            const Icon = isAlert ? AlertCircle : isWarning ? AlertTriangle : Info;
+            const tone = isAlert
+              ? "border-destructive/40 bg-destructive/5"
+              : isWarning ? "border-warning/40 bg-warning/10"
+              : "border-border bg-secondary/40";
+            const iconColor = isAlert ? "text-destructive" : isWarning ? "text-warning" : "text-primary";
             return (
-              <article key={a.id} className={`rounded-md border p-4 ${tone}`}>
+              <article key={i} className={`rounded-md border p-4 ${tone}`}>
                 <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-destructive" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{a.line || "Network"}</span>
+                  <Icon className={`h-4 w-4 ${iconColor}`} />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{n.line}</span>
                 </div>
-                <h3 className="mt-2 font-semibold text-foreground">{a.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{a.message}</p>
+                <p className="mt-2 text-sm text-foreground">{n.body}</p>
               </article>
             );
           })}
@@ -167,25 +147,5 @@ function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; 
         <p className="text-sm text-muted-foreground">{desc}</p>
       </div>
     </div>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">{children}</th>;
-}
-function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 ${className}`}>{children}</td>;
-}
-function StatusPill({ status, delay }: { status: string; delay?: number }) {
-  const cls =
-    status === "On Time"
-      ? "bg-success/15 text-success border-success/30"
-      : status === "Delayed"
-        ? "bg-warning/20 text-foreground border-warning/40"
-        : "bg-destructive/15 text-destructive border-destructive/30";
-  return (
-    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${cls}`}>
-      {status}{delay ? ` · +${delay}m` : ""}
-    </span>
   );
 }

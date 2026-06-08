@@ -7,6 +7,7 @@ import { Chatbot } from "@/components/Chatbot";
 import { SCHEDULES } from "@/data/prasa";
 import { Activity, MapPin, Clock, RefreshCw } from "lucide-react";
 import { ShareJourney } from "@/components/ShareJourney";
+import { useLang } from "@/lib/i18n";
 
 export const Route = createFileRoute("/tracking")({
   head: () => ({
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/tracking")({
 });
 
 function TrackingPage() {
+  const { t } = useLang();
   const [tick, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -52,12 +54,12 @@ function TrackingPage() {
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold md:text-3xl">
               <Activity className="h-6 w-6 text-destructive" />
-              Live train tracking
+              {t("liveTrackingTitle")}
             </h1>
-            <p className="mt-1 text-sm opacity-90">Simulated real-time positions across the network.</p>
+            <p className="mt-1 text-sm opacity-90">{t("liveTrackingDesc")}</p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
-            <RefreshCw className="h-3 w-3 animate-spin" /> Updates every 6s
+            <RefreshCw className="h-3 w-3 animate-spin" /> {t("updatesEvery")}
           </span>
         </div>
       </section>
@@ -71,48 +73,48 @@ function TrackingPage() {
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {trains.map((t) => {
-              const pct = ((t.progress + 1) / t.stops.length) * 100;
+            {trains.map((train) => {
+              const pct = ((train.progress + 1) / train.stops.length) * 100;
               const tone =
-                t.status === "On Time"
+                train.status === "On Time"
                   ? "bg-success"
-                  : t.status === "Delayed"
+                  : train.status === "Delayed"
                     ? "bg-warning"
                     : "bg-destructive";
               return (
-                <article key={t.id} className="rounded-md border border-border bg-card p-4 shadow-card">
+                <article key={train.id} className="rounded-md border border-border bg-card p-4 shadow-card">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="rounded-sm bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
-                          {t.line}
+                          {train.line}
                         </span>
-                        <span className="text-xs text-muted-foreground">#{t.trainNo}</span>
+                        <span className="text-xs text-muted-foreground">#{train.trainNo}</span>
                       </div>
                       <h3 className="mt-1 font-semibold text-foreground">
-                        {t.from} → {t.to}
+                        {train.from} → {train.to}
                       </h3>
                     </div>
                     <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold text-primary-foreground ${tone}`}>
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-                      {t.status}
+                      {train.status}
                     </span>
                   </div>
 
                   <div className="mt-4">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Now at <strong className="text-foreground">{t.currentStop}</strong></span>
-                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> ETA {t.eta}m</span>
+                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {t("nowAt")} <strong className="text-foreground">{train.currentStop}</strong></span>
+                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {t("eta")} {train.eta}m</span>
                     </div>
                     <div className="mt-2">
-                      <ShareJourney from={t.from} currentStop={t.currentStop} to={t.to} etaMinutes={t.eta} trainNo={t.trainNo} line={t.line} />
+                      <ShareJourney from={train.from} currentStop={train.currentStop} to={train.to} etaMinutes={train.eta} trainNo={train.trainNo} line={train.line} />
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
                       <div className={`h-full ${tone} transition-all duration-500`} style={{ width: `${pct}%` }} />
                     </div>
                     <div className="mt-2 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <span>{t.from}</span>
-                      <span>{t.to}</span>
+                      <span>{train.from}</span>
+                      <span>{train.to}</span>
                     </div>
                   </div>
                 </article>

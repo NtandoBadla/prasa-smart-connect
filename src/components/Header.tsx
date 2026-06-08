@@ -40,7 +40,7 @@ export function Header() {
       <div className="container mx-auto flex items-center justify-between px-4 py-3">
         {/* LOGO */}
         <Link to="/" className="flex items-center gap-3">
-          <img src="/Train Logo.png" alt="PRASA Smart Connect Logo" className="h-16 w-16 object-contain" style={{ imageRendering: "crisp-edges" }} />
+          <img src="/Train Logo.png" alt="PRASA Smart Connect Logo" className="h-20 w-20 object-contain" style={{ imageRendering: "crisp-edges" }} />
           <div className="leading-tight">
             <div className="text-lg font-bold tracking-tight">PRASA Smart Connect</div>
             <div className="text-[10px] uppercase tracking-widest opacity-80">{t("tagline")}</div>

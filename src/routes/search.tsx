@@ -9,7 +9,10 @@ import { RouteSearchForm } from "@/components/RouteSearchForm";
 import { TrainCard } from "@/components/TrainCard";
 import { searchTrains, SCHEDULES, type TrainSchedule } from "@/data/prasa";
 import { api } from "@/lib/api";
-import { Search as SearchIcon, Ticket, X, CheckCircle, Clock } from "lucide-react";
+import { Search as SearchIcon, Ticket, X, CheckCircle, Clock, Loader2 } from "lucide-react";
+import { useLang } from "@/lib/i18n";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { stripePromise } from "@/lib/stripe";
 
 const searchSchema = z.object({
   from: z.string().optional().default(""),
@@ -42,6 +45,7 @@ function matchRoute(schedules: TrainSchedule[], from: string, to: string): Train
 }
 
 function SearchPage() {
+  const { t } = useLang();
   const navigate = Route.useNavigate();
   const { from, to, time } = Route.useSearch();
   const [liveSchedules, setLiveSchedules] = useState<TrainSchedule[]>([]);
@@ -73,26 +77,39 @@ function SearchPage() {
     navigate({ search: { from: f, to: t, time: ti } });
   };
 
-  const handleGenerateTicket = async (train: TrainSchedule) => {
+  const [paymentClientSecret, setPaymentClientSecret] = useState<string | null>(null);
+  const [paymentTicketRef, setPaymentTicketRef] = useState("");
+
+  const handleOpenPayment = async (train: TrainSchedule) => {
+    if (!stripePromise) {
+      // No Stripe key — generate ticket directly
+      setTicketLoading(true);
+      try {
+        const ticket = await api.generateTicket({
+          trainNo: train.trainNo, line: train.line,
+          from: train.from, to: train.to,
+          departure: train.departure, arrival: train.arrival, fare: train.fare,
+        });
+        setGeneratedTicket({ ticket_ref: ticket.ticket_ref, booked_at: ticket.booked_at });
+      } catch (e: any) {
+        alert(e.message ?? "Could not generate ticket.");
+      } finally {
+        setTicketLoading(false);
+      }
+      return;
+    }
     setTicketLoading(true);
     try {
-      const ticket = await api.generateTicket({
-        trainNo: train.trainNo,
-        line: train.line,
-        from: train.from,
-        to: train.to,
-        departure: train.departure,
-        arrival: train.arrival,
-        fare: train.fare,
+      const { clientSecret, ticketRef } = await api.createPaymentIntent({
+        trainNo: train.trainNo, line: train.line,
+        from: train.from, to: train.to,
+        departure: train.departure, arrival: train.arrival, fare: train.fare,
       });
-      setGeneratedTicket(ticket);
-      setTicketModal(null);
-    } catch {
-      setGeneratedTicket({
-        ticket_ref: `TKT-${Date.now().toString(36).toUpperCase()}`,
-        booked_at: new Date().toISOString(),
-      });
-      setTicketModal(null);
+      setPaymentClientSecret(clientSecret);
+      setPaymentTicketRef(ticketRef);
+      setTicketModal(train);
+    } catch (e: any) {
+      alert(e.message ?? "Could not initiate payment.");
     } finally {
       setTicketLoading(false);
     }
@@ -105,8 +122,8 @@ function SearchPage() {
 
       <section className="bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 py-8">
-          <h1 className="text-2xl font-bold md:text-3xl">Plan your trip</h1>
-          <p className="mt-1 text-sm opacity-90">Find the next Metrorail train between any two stations.</p>
+          <h1 className="text-2xl font-bold md:text-3xl">{t("planTrip")}</h1>
+          <p className="mt-1 text-sm opacity-90">{t("planTripDesc")}</p>
         </div>
       </section>
 
@@ -116,15 +133,9 @@ function SearchPage() {
 
       <section className="container mx-auto flex-1 px-4 py-8">
         {!from || !to ? (
-          <EmptyState
-            title="Search to see trains"
-            desc="Enter a departure and destination station above. Try Cape Town to Simon's Town."
-          />
+          <EmptyState title={t("searchToSee")} desc={t("searchToSeeDesc")} />
         ) : noRoute ? (
-          <EmptyState
-            title="No service on this route"
-            desc={`There is no direct Metrorail service from ${from} to ${to}. Try the Trip Planner for routes with transfers.`}
-          />
+          <EmptyState title={t("noService")} desc={t("noServiceDesc").replace("{from}", from).replace("{to}", to)} />
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -139,14 +150,14 @@ function SearchPage() {
               )}
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              {results.map((t) => (
-                <div key={t.id} className="flex flex-col gap-2">
-                  <TrainCard train={t} />
+              {results.map((tr) => (
+                <div key={tr.id} className="flex flex-col gap-2">
+                  <TrainCard train={tr} />
                   <button
-                    onClick={() => setTicketModal(t)}
+                    onClick={() => handleOpenPayment(tr)}
                     className="flex items-center justify-center gap-2 rounded-sm border border-primary bg-primary/10 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/20"
                   >
-                    <Ticket className="h-4 w-4" /> Generate Ticket
+                    <Ticket className="h-4 w-4" /> {t("generateTicket")}
                   </button>
                 </div>
               ))}
@@ -155,31 +166,34 @@ function SearchPage() {
         )}
       </section>
 
-      {/* Ticket Confirmation Modal */}
-      {ticketModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      {/* Payment Modal */}
+      {ticketModal && paymentClientSecret && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16">
           <div className="w-full max-w-md rounded-md border border-border bg-card p-6 shadow-elevated">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-foreground">Confirm Ticket</h3>
-              <button onClick={() => setTicketModal(null)} className="text-muted-foreground hover:text-foreground">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-foreground">Pay for Ticket</h3>
+              <button onClick={() => { setTicketModal(null); setPaymentClientSecret(null); }} className="text-muted-foreground hover:text-foreground">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="mt-4 space-y-2 rounded-sm bg-secondary/40 p-4 text-sm">
-              <Row label="Route"    value={`${ticketModal.from} → ${ticketModal.to}`} />
-              <Row label="Train"    value={`#${ticketModal.trainNo} · ${ticketModal.line}`} />
-              <Row label="Departs"  value={ticketModal.departure} />
-              <Row label="Arrives"  value={ticketModal.arrival} />
-              <Row label="Platform" value={ticketModal.platform} />
-              <Row label="Fare"     value={`R ${ticketModal.fare.toFixed(2)}`} />
+            <div className="mb-4 space-y-1 rounded-sm bg-secondary/40 p-3 text-sm">
+              <Row label={t("route")}   value={`${ticketModal.from} → ${ticketModal.to}`} />
+              <Row label={t("train")}   value={`#${ticketModal.trainNo} · ${ticketModal.line}`} />
+              <Row label={t("departs")} value={ticketModal.departure} />
+              <Row label={t("fare")}    value={`R ${ticketModal.fare.toFixed(2)}`} />
+              <p className="pt-1 text-xs text-muted-foreground">Ref: <span className="font-mono font-semibold text-primary">{paymentTicketRef}</span></p>
             </div>
-            <button
-              onClick={() => handleGenerateTicket(ticketModal)}
-              disabled={ticketLoading}
-              className="mt-4 w-full rounded-sm bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-50"
-            >
-              {ticketLoading ? "Generating…" : "Confirm & Generate Ticket"}
-            </button>
+            <Elements stripe={stripePromise} options={{ clientSecret: paymentClientSecret, appearance: { theme: "stripe" } }}>
+              <StripePaymentForm
+                ticketModal={ticketModal}
+                onSuccess={(ticket) => {
+                  setGeneratedTicket(ticket);
+                  setTicketModal(null);
+                  setPaymentClientSecret(null);
+                }}
+                onCancel={() => { setTicketModal(null); setPaymentClientSecret(null); }}
+              />
+            </Elements>
           </div>
         </div>
       )}
@@ -189,19 +203,17 @@ function SearchPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-md border border-border bg-card p-6 text-center shadow-elevated">
             <CheckCircle className="mx-auto h-12 w-12 text-success" />
-            <h3 className="mt-3 text-lg font-bold text-foreground">Ticket Generated!</h3>
+            <h3 className="mt-3 text-lg font-bold text-foreground">{t("ticketGenerated")}</h3>
             <p className="mt-1 text-2xl font-mono font-bold text-primary">{generatedTicket.ticket_ref}</p>
             <p className="mt-2 text-xs text-muted-foreground">
               Booked {new Date(generatedTicket.booked_at).toLocaleString("en-ZA")}
             </p>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Your ticket has been saved. Show this reference at the station.
-            </p>
+            <p className="mt-3 text-sm text-muted-foreground">{t("ticketSaved")}</p>
             <button
               onClick={() => setGeneratedTicket(null)}
               className="mt-4 w-full rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
             >
-              Done
+              {t("done")}
             </button>
           </div>
         </div>
@@ -209,6 +221,61 @@ function SearchPage() {
 
       <Footer />
       <Chatbot />
+    </div>
+  );
+}
+
+function StripePaymentForm({
+  ticketModal,
+  onSuccess,
+  onCancel,
+}: {
+  ticketModal: import("@/data/prasa").TrainSchedule;
+  onSuccess: (ticket: { ticket_ref: string; booked_at: string }) => void;
+  onCancel: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [paying, setPaying] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [stripeError, setStripeError] = useState("");
+
+  const handlePay = async () => {
+    if (!stripe || !elements || !ready) return;
+    setPaying(true);
+    setStripeError("");
+    try {
+      const { error: submitErr } = await elements.submit();
+      if (submitErr) { setStripeError(submitErr.message ?? "Validation failed"); return; }
+      const { error, paymentIntent } = await stripe.confirmPayment({ elements, redirect: "if_required" });
+      if (error) { setStripeError(error.message ?? "Payment failed"); return; }
+      if (paymentIntent?.status === "succeeded") {
+        const ticket = await api.confirmPayment(paymentIntent.id);
+        onSuccess({ ticket_ref: ticket.ticket_ref, booked_at: ticket.booked_at });
+      }
+    } catch (e: any) {
+      setStripeError(e.message ?? "Payment error");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <PaymentElement onReady={() => setReady(true)} />
+      {!ready && <p className="text-xs text-muted-foreground">Loading payment form…</p>}
+      {stripeError && <p className="text-sm text-destructive">{stripeError}</p>}
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 rounded-sm border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary">Cancel</button>
+        <button
+          onClick={handlePay}
+          disabled={paying || !ready}
+          className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ticket className="h-4 w-4" />}
+          {paying ? "Processing…" : `Pay R ${ticketModal.fare.toFixed(2)}`}
+        </button>
+      </div>
     </div>
   );
 }

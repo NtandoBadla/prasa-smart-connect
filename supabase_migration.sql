@@ -39,22 +39,31 @@ create index if not exists idx_train_updates_updated_at on train_updates (update
 
 -- ── Generated passenger tickets ───────────────────────────────────────────────
 create table if not exists tickets (
-  id           uuid primary key default gen_random_uuid(),
-  ticket_ref   text not null,
-  user_id      uuid,
-  train_no     text not null,
-  line         text not null,
-  from_station text not null,
-  to_station   text not null,
-  departure    text not null,
-  arrival      text,
-  fare         numeric default 0,
-  travel_class text default 'Metro',
-  booked_at    timestamptz default now()
+  id                 uuid primary key default gen_random_uuid(),
+  ticket_ref         text not null unique,
+  qr_token           text not null unique,          -- one-time scannable token
+  user_id            uuid,
+  train_no           text not null,
+  line               text not null,
+  from_station       text not null,
+  to_station         text not null,
+  departure          text not null,
+  arrival            text,
+  fare               numeric default 0,
+  travel_class       text default 'Metro',
+  payment_intent_id  text unique,                   -- Stripe PaymentIntent id
+  payment_status     text default 'pending'         -- pending | paid | failed
+                       check (payment_status in ('pending','paid','failed')),
+  used               boolean default false,         -- ticket has been scanned
+  used_at            timestamptz,
+  booked_at          timestamptz default now()
 );
 
-create index if not exists idx_tickets_user_id  on tickets (user_id);
-create index if not exists idx_tickets_booked_at on tickets (booked_at desc);
+create index if not exists idx_tickets_user_id         on tickets (user_id);
+create index if not exists idx_tickets_booked_at       on tickets (booked_at desc);
+create index if not exists idx_tickets_payment_intent  on tickets (payment_intent_id);
+create index if not exists idx_tickets_qr_token        on tickets (qr_token);
+create index if not exists idx_tickets_used            on tickets (used);
 
 -- ── Safety incidents ──────────────────────────────────────────────────────────
 create table if not exists safety_incidents (

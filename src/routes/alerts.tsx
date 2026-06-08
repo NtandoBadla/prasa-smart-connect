@@ -4,6 +4,7 @@ import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
 import { ALERTS } from "@/data/prasa";
 import { AlertCircle, AlertTriangle, Info } from "lucide-react";
+import { useLang } from "@/lib/i18n";
 
 export const Route = createFileRoute("/alerts")({
   head: () => ({
@@ -20,14 +21,15 @@ export const Route = createFileRoute("/alerts")({
 const iconMap = { critical: AlertCircle, warning: AlertTriangle, info: Info };
 
 function AlertsPage() {
+  const { t } = useLang();
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
 
       <section className="bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 py-8">
-          <h1 className="text-2xl font-bold md:text-3xl">Service alerts</h1>
-          <p className="mt-1 text-sm opacity-90">All current disruptions, delays and planned maintenance.</p>
+          <h1 className="text-2xl font-bold md:text-3xl">{t("serviceAlertsTitle")}</h1>
+          <p className="mt-1 text-sm opacity-90">{t("serviceAlertsDesc")}</p>
         </div>
       </section>
 
@@ -56,7 +58,7 @@ function AlertsPage() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{a.message}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Posted {new Date(a.postedAt).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}
+                      {t("posted")} {new Date(a.postedAt).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}
                     </p>
                   </div>
                 </div>
