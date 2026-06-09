@@ -5,12 +5,14 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  NODE_OPTIONS = "--max-old-space-size=4096"
 
 # Route all /api/* requests to the Netlify Function
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
+  force = true
 
 # SPA fallback — all other routes serve index.html
 [[redirects]]
