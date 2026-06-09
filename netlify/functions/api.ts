@@ -19,6 +19,8 @@ import ticketsRouter    from "../../server/routes/tickets";
 import sentimentRouter  from "../../server/routes/sentiment";
 import lostFoundRouter  from "../../server/routes/lostFound";
 import safetyRouter     from "../../server/routes/safety";
+import timetableRouter  from "../../server/routes/timetable";
+import stationSearchRouter from "../../server/routes/stationSearch";
 
 import { SCHEDULES as SEED_SCHEDULES, ALERTS as SEED_ALERTS } from "../../src/data/prasa";
 import type { TrainSchedule, ServiceAlert } from "../../src/data/prasa";
@@ -195,6 +197,65 @@ app.use(["/api/tickets",       "/tickets"],       ticketsRouter);
 app.use(["/api/sentiment",     "/sentiment"],     sentimentRouter);
 app.use(["/api/lost-found",    "/lost-found"],    lostFoundRouter);
 app.use(["/api/safety",        "/safety"],        safetyRouter);
+app.use(["/api/timetable",     "/timetable"],     timetableRouter);
+app.use(["/api/stations",      "/stations"],      stationSearchRouter);
+
+// ── Admin: Tickets ────────────────────────────────────────────────────────────
+const TICKET_SELECT = "id, ticket_ref, qr_token, user_id, passenger_name, id_number, phone, email, train_no, line, from_station, to_station, departure, arrival, fare, travel_class, payment_intent_id, payment_status, used, used_at, booked_at";
+
+app.get(["/api/admin/tickets", "/admin/tickets"], requireAuth, async (req, res) => {
+  const { q, status, line } = req.query as { q?: string; status?: string; line?: string };
+  let query = supabase.from("tickets").select(TICKET_SELECT).order("booked_at", { ascending: false }).limit(200);
+  if (status) query = query.eq("payment_status", status);
+  if (line)   query = query.eq("line", line);
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  let results = data ?? [];
+  if (q) {
+    const lower = q.toLowerCase();
+    results = results.filter((t: any) =>
+      [t.ticket_ref, t.passenger_name, t.id_number, t.email, t.phone, t.payment_intent_id, t.train_no]
+        .some((v) => v && String(v).toLowerCase().includes(lower))
+    );
+  }
+  res.json(results);
+});
+
+app.post(["/api/admin/tickets/reissue", "/admin/tickets/reissue"], requireAuth, async (req, res) => {
+  const { ticketId, channels } = req.body as { ticketId: string; channels: ("email" | "sms")[] };
+  if (!ticketId || !channels?.length) { res.status(400).json({ error: "ticketId and channels required" }); return; }
+  const { data: ticket, error: fetchErr } = await supabase.from("tickets").select(TICKET_SELECT).eq("id", ticketId).single();
+  if (fetchErr || !ticket) { res.status(404).json({ error: "Ticket not found" }); return; }
+  const results: { channel: string; status: string; error?: string }[] = [];
+  if (channels.includes("email") && ticket.email) {
+    try {
+      await sendEmail({ to: ticket.email, subject: `Your PRASA Ticket - ${ticket.ticket_ref}`, html: "",
+        templateId: process.env.EMAILJS_TEMPLATE_ID,
+        templateParams: { to_email: ticket.email, ticket_ref: ticket.ticket_ref, passenger_name: ticket.passenger_name ?? "Passenger",
+          train_no: ticket.train_no, line: ticket.line, from_station: ticket.from_station, to_station: ticket.to_station,
+          departure: ticket.departure, arrival: ticket.arrival ?? "-", fare: `R${Number(ticket.fare).toFixed(2)}`,
+          travel_class: ticket.travel_class, payment_status: ticket.payment_status.toUpperCase(),
+          booked_at: new Date(ticket.booked_at).toLocaleString("en-ZA") } });
+      results.push({ channel: "email", status: "sent" });
+    } catch (err: any) { results.push({ channel: "email", status: "failed", error: err.message }); }
+  } else if (channels.includes("email")) {
+    results.push({ channel: "email", status: "skipped", error: "No email on record" });
+  }
+  try {
+    await supabase.from("ticket_recovery_log").insert({
+      ticket_id: ticket.id, ticket_ref: ticket.ticket_ref,
+      action: channels.map((c) => `reissue_${c}`).join("+"),
+      note: results.map((r) => `${r.channel}:${r.status}`).join(" | "),
+    });
+  } catch { /* non-fatal */ }
+  res.json({ ticket_ref: ticket.ticket_ref, results });
+});
+
+app.get(["/api/admin/tickets/recovery-log", "/admin/tickets/recovery-log"], requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("ticket_recovery_log").select("*").order("created_at", { ascending: false }).limit(100);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
 
 // ── Admin: Lost & Found ────────────────────────────────────────────────────────
 app.get(["/api/admin/lost-found", "/admin/lost-found"], requireAuth, async (_req, res) => {
