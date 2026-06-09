@@ -1,20 +1,21 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import type { AdminTicket, PrasaRoute, TimetableStop } from "@/lib/api";
 import type { TrainSchedule, ServiceAlert } from "@/data/prasa";
 import type { NewsItem } from "@/data/extras";
 import { STATIONS } from "@/data/prasa";
 import {
   Train, AlertTriangle, Newspaper, LayoutDashboard,
   LogOut, Plus, Pencil, Trash2, Check, X, RefreshCw,
-  Users, Send, Bell, ShieldAlert, CalendarClock, MessageSquare, PackageSearch,
+  Users, Send, Bell, ShieldAlert, CalendarClock, MessageSquare, PackageSearch, Ticket, Search, RotateCcw,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
 });
 
-type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety" | "timetable" | "coachfeedback" | "lostfound";
+type Tab = "overview" | "schedules" | "alerts" | "news" | "subscribers" | "update" | "safety" | "timetable" | "coachfeedback" | "lostfound" | "tickets";
 
 type Stats = {
   totalSchedules: number; onTime: number; delayed: number;
@@ -48,6 +49,7 @@ function AdminDashboard() {
   const [timetableEntries, setTimetableEntries] = useState<Record<string, unknown>[]>([]);
   const [coachFeedback, setCoachFeedback] = useState<any[]>([]);
   const [lostFoundItems, setLostFoundItems] = useState<LostFoundItem[]>([]);
+  const [adminTickets, setAdminTickets] = useState<AdminTicket[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -55,13 +57,14 @@ function AdminDashboard() {
     try {
       const [s, a, n, st] = await Promise.all([api.schedules(), api.alerts(), api.news(), api.stats()]);
       setSchedules(s); setAlerts(a); setNews(n); setStats(st);
-      // Load subscribers and updates in background — don't block if Supabase not configured
+      // Load in background — don't block if Supabase not configured
       api.subscribers().then(setSubscribers).catch(() => {});
       api.recentUpdates().then(setUpdates).catch(() => {});
       api.adminSafetyIncidents().then(setSafetyIncidents).catch(() => {});
       api.timetable().then(setTimetableEntries).catch(() => {});
       api.coachFeedback().then(setCoachFeedback).catch(() => {});
       api.adminLostFound().then(setLostFoundItems).catch(() => {});
+      api.adminTickets().then(setAdminTickets).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -77,14 +80,9 @@ function AdminDashboard() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Sidebar */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
         <div className="flex items-center gap-2 border-b border-border px-4 py-4">
-          <img
-            src="/Train Logo.png"
-            alt="PRASA Logo"
-            className="h-10 w-10 object-contain"
-          />
+          <img src="/Train Logo.png" alt="PRASA Logo" className="h-10 w-10 object-contain" />
           <span className="font-bold text-foreground">PRASA Admin</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
@@ -116,10 +114,11 @@ function AdminDashboard() {
             onClick={() => setTab("lostfound")}
             count={lostFoundItems.filter((item) => item.status === "open").length}
           />
+          <NavItem icon={<Ticket className="h-4 w-4" />} label="Ticket Recovery" active={tab === "tickets"} onClick={() => setTab("tickets")} />
         </nav>
         <div className="border-t border-border p-3 space-y-1">
           <Link to="/" className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm text-muted-foreground hover:bg-secondary">
-            ← Public site
+            &larr; Public site
           </Link>
           <button onClick={handleLogout} className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-sm text-destructive hover:bg-destructive/10">
             <LogOut className="h-4 w-4" /> Logout
@@ -127,7 +126,6 @@ function AdminDashboard() {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-border bg-card px-6 py-3">
           <h1 className="font-semibold text-foreground capitalize">{tab}</h1>
@@ -145,8 +143,10 @@ function AdminDashboard() {
           {tab === "subscribers" && <SubscribersTab subscribers={subscribers} />}
           {tab === "safety" && <SafetyTab incidents={safetyIncidents} onRefresh={refresh} />}
           {tab === "timetable" && <TimetableTab entries={timetableEntries} onRefresh={refresh} />}
+          {/* TimetableTab uses its own internal state — entries prop kept for legacy compat */}
           {tab === "coachfeedback" && <CoachFeedbackTab feedback={coachFeedback} />}
           {tab === "lostfound" && <LostFoundTab items={lostFoundItems} onRefresh={refresh} />}
+          {tab === "tickets" && <TicketRecoveryTab tickets={adminTickets} onRefresh={() => api.adminTickets().then(setAdminTickets).catch(() => {})} />}
         </main>
       </div>
     </div>
@@ -168,20 +168,17 @@ function OverviewTab({ stats, schedules, alerts }: { stats: Stats; schedules: Tr
         <StatCard label="Critical Alerts" value={stats.criticalAlerts} color="bg-destructive" />
         <StatCard label="Subscribers" value={stats.totalSubscribers} color="bg-primary" />
       </div>
-
       <div className="rounded-md border border-border bg-card">
         <div className="border-b border-border px-4 py-3 font-semibold text-foreground">Recent schedules</div>
         <table className="w-full text-sm">
           <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
-            <tr>
-              <Th>Train</Th><Th>Route</Th><Th>Depart</Th><Th>Status</Th>
-            </tr>
+            <tr><Th>Train</Th><Th>Route</Th><Th>Depart</Th><Th>Status</Th></tr>
           </thead>
           <tbody>
             {schedules.slice(0, 5).map((s) => (
               <tr key={s.id} className="border-t border-border">
                 <Td>#{s.trainNo}</Td>
-                <Td>{s.from} → {s.to}</Td>
+                <Td>{s.from} &rarr; {s.to}</Td>
                 <Td>{s.departure}</Td>
                 <Td><StatusBadge status={s.status} /></Td>
               </tr>
@@ -189,7 +186,6 @@ function OverviewTab({ stats, schedules, alerts }: { stats: Stats; schedules: Tr
           </tbody>
         </table>
       </div>
-
       <div className="rounded-md border border-border bg-card">
         <div className="border-b border-border px-4 py-3 font-semibold text-foreground">Active alerts</div>
         <div className="divide-y divide-border">
@@ -241,30 +237,18 @@ function SchedulesTab({ schedules, onRefresh }: { schedules: TrainSchedule[]; on
           <Plus className="h-4 w-4" /> Add schedule
         </button>
       </div>
-
-      {editing && (
-        <ScheduleForm
-          data={editing}
-          onChange={setEditing}
-          onSave={save}
-          onCancel={() => setEditing(null)}
-          isNew={isNew}
-        />
-      )}
-
+      {editing && <ScheduleForm data={editing} onChange={setEditing} onSave={save} onCancel={() => setEditing(null)} isNew={isNew} />}
       <div className="rounded-md border border-border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
-            <tr>
-              <Th>Train</Th><Th>Line</Th><Th>Route</Th><Th>Depart</Th><Th>Arrive</Th><Th>Status</Th><Th>Fare</Th><th className="px-4 py-2" />
-            </tr>
+            <tr><Th>Train</Th><Th>Line</Th><Th>Route</Th><Th>Depart</Th><Th>Arrive</Th><Th>Status</Th><Th>Fare</Th><th className="px-4 py-2" /></tr>
           </thead>
           <tbody>
             {schedules.map((s) => (
               <tr key={s.id} className="border-t border-border hover:bg-secondary/30">
                 <Td>#{s.trainNo}</Td>
                 <Td>{s.line}</Td>
-                <Td>{s.from} → {s.to}</Td>
+                <Td>{s.from} &rarr; {s.to}</Td>
                 <Td>{s.departure}</Td>
                 <Td>{s.arrival}</Td>
                 <Td><StatusBadge status={s.status} /></Td>
@@ -361,7 +345,6 @@ function AlertsTab({ alerts, onRefresh }: { alerts: ServiceAlert[]; onRefresh: (
           <Plus className="h-4 w-4" /> Post alert
         </button>
       </div>
-
       {editing && (
         <div className="rounded-md border border-primary/40 bg-card p-4">
           <h3 className="mb-3 font-semibold text-foreground">{isNew ? "New alert" : "Edit alert"}</h3>
@@ -385,7 +368,6 @@ function AlertsTab({ alerts, onRefresh }: { alerts: ServiceAlert[]; onRefresh: (
           </div>
         </div>
       )}
-
       <div className="space-y-3">
         {alerts.map((a) => (
           <div key={a.id} className="flex items-start justify-between gap-3 rounded-md border border-border bg-card p-4">
@@ -436,7 +418,6 @@ function NewsTab({ news, onRefresh }: { news: NewsItem[]; onRefresh: () => void 
           <Plus className="h-4 w-4" /> Write update
         </button>
       </div>
-
       {editing && (
         <div className="rounded-md border border-primary/40 bg-card p-4">
           <h3 className="mb-3 font-semibold text-foreground">{isNew ? "New article" : "Edit article"}</h3>
@@ -460,7 +441,6 @@ function NewsTab({ news, onRefresh }: { news: NewsItem[]; onRefresh: () => void 
           </div>
         </div>
       )}
-
       <div className="grid gap-4 sm:grid-cols-2">
         {news.map((n) => (
           <div key={n.id} className="rounded-md border border-border bg-card p-4">
@@ -481,11 +461,12 @@ function NewsTab({ news, onRefresh }: { news: NewsItem[]; onRefresh: () => void 
   );
 }
 
-// ── Lost & Found Tab ──────────────────────────────────────────────────────────────────────────────
+// ── Lost & Found Tab ──────────────────────────────────────────────────────────
 function LostFoundTab({ items, onRefresh }: { items: LostFoundItem[]; onRefresh: () => void }) {
   const [filterStation, setFilterStation] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [updating, setUpdating] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState("");
 
   const filtered = items.filter((item) => {
     if (filterStation && item.station !== filterStation) return false;
@@ -495,8 +476,7 @@ function LostFoundTab({ items, onRefresh }: { items: LostFoundItem[]; onRefresh:
 
   const openItems = items.filter((item) => item.status === "open").length;
   const matchedItems = items.filter((item) => item.status === "matched").length;
-
-  const [updateError, setUpdateError] = useState("");
+  const stations = [...new Set(items.map((item) => item.station))].sort();
 
   async function updateStatus(id: string, status: "open" | "matched") {
     setUpdating(id);
@@ -511,63 +491,37 @@ function LostFoundTab({ items, onRefresh }: { items: LostFoundItem[]; onRefresh:
     }
   }
 
-  // Get unique stations from items
-  const stations = [...new Set(items.map((item) => item.station))].sort();
-
   return (
     <div className="space-y-6">
-      {/* Summary */}
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total Reports" value={items.length} color="bg-primary" />
         <StatCard label="Open Items" value={openItems} color="bg-warning" />
         <StatCard label="Found Items" value={matchedItems} color="bg-success" />
       </div>
-
       {updateError && (
         <p className="rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {updateError} — your session may have expired, please <a href="/admin/login" className="underline">log in again</a>.
+          {updateError} &mdash; your session may have expired, please <a href="/admin/login" className="underline">log in again</a>.
         </p>
       )}
-
-      {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <select
-          value={filterStation}
-          onChange={(e) => setFilterStation(e.target.value)}
-          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-        >
+        <select value={filterStation} onChange={(e) => setFilterStation(e.target.value)} className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground">
           <option value="">All stations</option>
-          {stations.map((station) => (
-            <option key={station} value={station}>{station}</option>
-          ))}
+          {stations.map((station) => <option key={station} value={station}>{station}</option>)}
         </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-        >
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground">
           <option value="">All statuses</option>
           <option value="open">Open</option>
           <option value="matched">Found</option>
         </select>
-        <span className="self-center text-sm text-muted-foreground">
-          {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-        </span>
+        <span className="self-center text-sm text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
       </div>
-
-      {/* Items table */}
       {filtered.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          No lost & found reports yet.
-        </p>
+        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">No lost &amp; found reports yet.</p>
       ) : (
         <div className="rounded-md border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
-              <tr>
-                <Th>Item</Th><Th>Station</Th><Th>Date</Th><Th>Contact</Th>
-                <Th>Reference</Th><Th>Status</Th><Th>Reported</Th><Th>Actions</Th>
-              </tr>
+              <tr><Th>Item</Th><Th>Station</Th><Th>Date</Th><Th>Contact</Th><Th>Reference</Th><Th>Status</Th><Th>Reported</Th><Th>Actions</Th></tr>
             </thead>
             <tbody>
               {filtered.map((item) => (
@@ -578,11 +532,7 @@ function LostFoundTab({ items, onRefresh }: { items: LostFoundItem[]; onRefresh:
                   <Td><span className="text-xs text-muted-foreground">{item.contact}</span></Td>
                   <Td><code className="text-xs bg-secondary px-1 py-0.5 rounded">{item.contact_ref}</code></Td>
                   <Td>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      item.status === "matched"
-                        ? "bg-success/15 text-success"
-                        : "bg-warning/20 text-foreground"
-                    }`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.status === "matched" ? "bg-success/15 text-success" : "bg-warning/20 text-foreground"}`}>
                       {item.status === "matched" ? "Found" : "Open"}
                     </span>
                   </Td>
@@ -590,22 +540,10 @@ function LostFoundTab({ items, onRefresh }: { items: LostFoundItem[]; onRefresh:
                   <Td>
                     <div className="flex gap-1">
                       {item.status === "open" && (
-                        <button
-                          disabled={updating === item.id}
-                          onClick={() => updateStatus(item.id, "matched")}
-                          className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50"
-                        >
-                          Mark Found
-                        </button>
+                        <button disabled={updating === item.id} onClick={() => updateStatus(item.id, "matched")} className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50">Mark Found</button>
                       )}
                       {item.status === "matched" && (
-                        <button
-                          disabled={updating === item.id}
-                          onClick={() => updateStatus(item.id, "open")}
-                          className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50"
-                        >
-                          Reopen
-                        </button>
+                        <button disabled={updating === item.id} onClick={() => updateStatus(item.id, "open")} className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50">Reopen</button>
                       )}
                     </div>
                   </Td>
@@ -633,9 +571,7 @@ function NavItemBadge({ icon, label, active, onClick, count }: { icon: React.Rea
     <button onClick={onClick} className={`flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-sm font-medium transition-colors ${active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"}`}>
       <span className="flex items-center gap-2">{icon} {label}</span>
       {count > 0 && (
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-          {count}
-        </span>
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">{count}</span>
       )}
     </button>
   );
@@ -684,7 +620,7 @@ function Td({ children }: { children: React.ReactNode }) {
   return <td className="px-4 py-2">{children}</td>;
 }
 
-// ── Coach Feedback Tab ──────────────────────────────────────────────────────────────────
+// ── Coach Feedback Tab ────────────────────────────────────────────────────────
 function CoachFeedbackTab({ feedback }: { feedback: any[] }) {
   const [filterLine, setFilterLine] = useState("");
   const [filterSentiment, setFilterSentiment] = useState("");
@@ -699,25 +635,20 @@ function CoachFeedbackTab({ feedback }: { feedback: any[] }) {
   const negative = feedback.filter((f) => f.hf_label === "negative" || f.vader_compound < -0.2).length;
   const positive = feedback.filter((f) => f.hf_label === "positive" && f.vader_compound >= 0).length;
 
-  // Group by coach for summary
-  const byCoach: Record<number, { count: number; negCount: number; texts: string[] }> = {};
+  const byCoach: Record<number, { count: number; negCount: number }> = {};
   feedback.forEach((f) => {
-    if (!byCoach[f.coach]) byCoach[f.coach] = { count: 0, negCount: 0, texts: [] };
+    if (!byCoach[f.coach]) byCoach[f.coach] = { count: 0, negCount: 0 };
     byCoach[f.coach].count++;
     if (f.hf_label === "negative" || f.vader_compound < -0.2) byCoach[f.coach].negCount++;
-    byCoach[f.coach].texts.push(f.feedback_text);
   });
 
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total Submissions" value={feedback.length} color="bg-primary" />
         <StatCard label="Negative Sentiment" value={negative} color="bg-destructive" />
         <StatCard label="Positive Sentiment" value={positive} color="bg-success" />
       </div>
-
-      {/* Coach summary */}
       {Object.keys(byCoach).length > 0 && (
         <div className="rounded-md border border-border bg-card p-5">
           <h3 className="mb-3 font-semibold text-foreground">Sentiment by Coach</h3>
@@ -736,67 +667,44 @@ function CoachFeedbackTab({ feedback }: { feedback: any[] }) {
           </div>
         </div>
       )}
-
-      {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <select
-          value={filterLine}
-          onChange={(e) => setFilterLine(e.target.value)}
-          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-        >
+        <select value={filterLine} onChange={(e) => setFilterLine(e.target.value)} className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground">
           <option value="">All lines</option>
-          {["Southern Line", "Northern Line", "Central Line", "Cape Flats Line"].map((l) => (
-            <option key={l}>{l}</option>
-          ))}
+          {["Southern Line", "Northern Line", "Central Line", "Cape Flats Line"].map((l) => <option key={l}>{l}</option>)}
         </select>
-        <select
-          value={filterSentiment}
-          onChange={(e) => setFilterSentiment(e.target.value)}
-          className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-        >
+        <select value={filterSentiment} onChange={(e) => setFilterSentiment(e.target.value)} className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground">
           <option value="">All sentiments</option>
           <option value="negative">Negative only</option>
           <option value="positive">Positive only</option>
         </select>
         <span className="self-center text-sm text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
       </div>
-
-      {/* Table */}
       {filtered.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          No coach feedback submitted yet.
-        </p>
+        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">No coach feedback submitted yet.</p>
       ) : (
         <div className="rounded-md border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
-              <tr>
-                <Th>Time</Th><Th>Train</Th><Th>Route</Th><Th>Coach</Th>
-                <Th>HF</Th><Th>VADER</Th><Th>Feedback</Th>
-              </tr>
+              <tr><Th>Time</Th><Th>Train</Th><Th>Route</Th><Th>Coach</Th><Th>HF</Th><Th>VADER</Th><Th>Feedback</Th></tr>
             </thead>
             <tbody>
               {filtered.map((f) => {
                 const isNeg = f.hf_label === "negative" || f.vader_compound < -0.2;
                 return (
-                  <tr key={f.id} className={`border-t border-border ${isNeg ? "bg-destructive/5" : ""}` }>
+                  <tr key={f.id} className={`border-t border-border ${isNeg ? "bg-destructive/5" : ""}`}>
                     <Td>{new Date(f.submitted_at).toLocaleString("en-ZA", { dateStyle: "short", timeStyle: "short" })}</Td>
                     <Td>#{f.train_no} <span className="text-xs text-muted-foreground">{f.line}</span></Td>
-                    <Td>{f.from_station} → {f.to_station}</Td>
+                    <Td>{f.from_station} &rarr; {f.to_station}</Td>
                     <Td><span className="font-bold">Coach {f.coach}</span></Td>
                     <Td>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        f.hf_label === "positive" ? "bg-success/15 text-success" :
-                        f.hf_label === "negative" ? "bg-destructive/15 text-destructive" :
-                        "bg-secondary text-muted-foreground"
-                      }`}>{f.hf_label} ({(f.hf_confidence * 100).toFixed(0)}%)</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${f.hf_label === "positive" ? "bg-success/15 text-success" : f.hf_label === "negative" ? "bg-destructive/15 text-destructive" : "bg-secondary text-muted-foreground"}`}>
+                        {f.hf_label} ({(f.hf_confidence * 100).toFixed(0)}%)
+                      </span>
                     </Td>
                     <Td>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        f.vader_compound >= 0.2 ? "bg-success/15 text-success" :
-                        f.vader_compound <= -0.2 ? "bg-destructive/15 text-destructive" :
-                        "bg-secondary text-muted-foreground"
-                      }`}>{f.vader_label} ({f.vader_compound.toFixed(2)})</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${f.vader_compound >= 0.2 ? "bg-success/15 text-success" : f.vader_compound <= -0.2 ? "bg-destructive/15 text-destructive" : "bg-secondary text-muted-foreground"}`}>
+                        {f.vader_label} ({f.vader_compound.toFixed(2)})
+                      </span>
                     </Td>
                     <Td><span className="line-clamp-2 block max-w-xs text-muted-foreground">{f.feedback_text}</span></Td>
                   </tr>
@@ -844,13 +752,8 @@ function TrainUpdateTab({ updates, onRefresh }: { updates: TrainUpdateRecord[]; 
             <Field label="Train Number" value={form.trainNo} onChange={(v) => setForm((f) => ({ ...f, trainNo: v }))} />
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Station</label>
-              <select
-                required
-                value={form.station}
-                onChange={(e) => setForm((f) => ({ ...f, station: e.target.value }))}
-                className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="">Select a station…</option>
+              <select required value={form.station} onChange={(e) => setForm((f) => ({ ...f, station: e.target.value }))} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                <option value="">Select a station&hellip;</option>
                 {STATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
@@ -872,21 +775,20 @@ function TrainUpdateTab({ updates, onRefresh }: { updates: TrainUpdateRecord[]; 
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Reason (optional)</label>
-            <textarea rows={2} value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. Cable theft, signal failure, track maintenance…" className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+            <textarea rows={2} value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. Cable theft, signal failure, track maintenance&hellip;" className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           {result && (
             <div className="rounded-sm bg-success/10 p-3 text-sm text-success">
-              {result.message} — <strong>{result.notified}</strong> subscriber(s) notified.
+              {result.message} &mdash; <strong>{result.notified}</strong> subscriber(s) notified.
             </div>
           )}
           <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-sm bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-60">
             <Send className="h-4 w-4" />
-            {loading ? "Sending…" : "Post update & notify subscribers"}
+            {loading ? "Sending\u2026" : "Post update & notify subscribers"}
           </button>
         </form>
       </div>
-
       {updates.length > 0 && (
         <div className="rounded-md border border-border bg-card">
           <div className="border-b border-border px-4 py-3 font-semibold text-foreground">Recent updates</div>
@@ -895,7 +797,7 @@ function TrainUpdateTab({ updates, onRefresh }: { updates: TrainUpdateRecord[]; 
               <div key={u.id} className="flex items-start gap-3 px-4 py-3">
                 <StatusBadge status={u.status} />
                 <div>
-                  <p className="text-sm font-medium text-foreground">Train #{u.train_no} · {u.station} · {u.line}</p>
+                  <p className="text-sm font-medium text-foreground">Train #{u.train_no} &middot; {u.station} &middot; {u.line}</p>
                   {u.reason && <p className="text-xs text-muted-foreground">{u.reason}</p>}
                   <p className="text-xs text-muted-foreground">{new Date(u.updated_at).toLocaleString("en-ZA")}</p>
                 </div>
@@ -918,15 +820,9 @@ function SubscribersTab({ subscribers }: { subscribers: Subscriber[] }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by email or station…"
-          className="flex-1 rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by email or station&hellip;" className="flex-1 rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
         <span className="text-sm text-muted-foreground">{filtered.length} subscriber{filtered.length !== 1 ? "s" : ""}</span>
       </div>
-
       {subscribers.length === 0 ? (
         <div className="rounded-md border border-border bg-card p-8 text-center text-sm text-muted-foreground">
           No subscribers yet. Users can register at <strong>/register</strong>.
@@ -935,9 +831,7 @@ function SubscribersTab({ subscribers }: { subscribers: Subscriber[] }) {
         <div className="rounded-md border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
-              <tr>
-                <Th>Email</Th><Th>Home Station</Th><Th>Registered</Th>
-              </tr>
+              <tr><Th>Email</Th><Th>Home Station</Th><Th>Registered</Th></tr>
             </thead>
             <tbody>
               {filtered.map((s) => (
@@ -955,7 +849,7 @@ function SubscribersTab({ subscribers }: { subscribers: Subscriber[] }) {
   );
 }
 
-// ── Safety Tab ────────────────────────────────────────────────────────────────────────────
+// ── Safety Tab ────────────────────────────────────────────────────────────────
 const TYPE_COLOR: Record<string, string> = {
   "Suspicious activity": "bg-warning/20 text-foreground border-warning/40",
   "Theft / robbery":     "bg-destructive/15 text-destructive border-destructive/30",
@@ -976,22 +870,17 @@ function SafetyTab({ incidents, onRefresh }: { incidents: SafetyIncident[]; onRe
 
   return (
     <div className="space-y-6">
-      {/* Summary */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total Reports"   value={incidents.length}                                    color="bg-primary" />
-        <StatCard label="Pending"         value={pending.length}                                      color="bg-destructive" />
-        <StatCard label="Resolved"        value={incidents.filter((i) => i.status === "resolved").length} color="bg-success" />
+        <StatCard label="Total Reports" value={incidents.length} color="bg-primary" />
+        <StatCard label="Pending" value={pending.length} color="bg-destructive" />
+        <StatCard label="Resolved" value={incidents.filter((i) => i.status === "resolved").length} color="bg-success" />
       </div>
-
-      {/* Pending banner */}
       {pending.length > 0 && (
         <div className="rounded-md border border-destructive/30 bg-card">
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <ShieldAlert className="h-4 w-4 text-destructive" />
-            <span className="font-semibold text-foreground">Pending — requires action</span>
-            <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-              {pending.length}
-            </span>
+            <span className="font-semibold text-foreground">Pending &mdash; requires action</span>
+            <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">{pending.length}</span>
           </div>
           <div className="divide-y divide-border">
             {pending.map((inc) => (
@@ -999,33 +888,21 @@ function SafetyTab({ incidents, onRefresh }: { incidents: SafetyIncident[]; onRe
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${TYPE_COLOR[inc.type] ?? ""}` }>
-                      {inc.type}
-                    </span>
+                    <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${TYPE_COLOR[inc.type] ?? ""}`}>{inc.type}</span>
                     <span className="text-xs text-muted-foreground">{inc.station}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(inc.created_at).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{new Date(inc.created_at).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}</span>
                   </div>
                   <p className="mt-1 text-sm text-foreground">{inc.details}</p>
                 </div>
                 <div className="flex shrink-0 gap-1">
-                  <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "in_progress")}
-                    className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50">
-                    In progress
-                  </button>
-                  <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "resolved")}
-                    className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50">
-                    Resolve
-                  </button>
+                  <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "in_progress")} className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50">In progress</button>
+                  <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "resolved")} className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50">Resolve</button>
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
-
-      {/* All incidents table */}
       <div className="rounded-md border border-border bg-card">
         <div className="border-b border-border px-4 py-3 font-semibold text-foreground">All reports</div>
         {incidents.length === 0 ? (
@@ -1034,39 +911,25 @@ function SafetyTab({ incidents, onRefresh }: { incidents: SafetyIncident[]; onRe
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
-                <tr><Th>Type</Th><Th>Station</Th><Th>Details</Th><Th>Status</Th><Th>Reported</Th><Th /></tr>
+                <tr><Th>Type</Th><Th>Station</Th><Th>Details</Th><Th>Status</Th><Th>Reported</Th><th className="px-4 py-2" /></tr>
               </thead>
               <tbody>
                 {incidents.map((inc) => (
                   <tr key={inc.id} className="border-t border-border hover:bg-secondary/30">
-                    <Td>
-                      <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${TYPE_COLOR[inc.type] ?? "bg-secondary border-border text-foreground"}`}>
-                        {inc.type}
-                      </span>
-                    </Td>
+                    <Td><span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${TYPE_COLOR[inc.type] ?? "bg-secondary border-border text-foreground"}`}>{inc.type}</span></Td>
                     <Td>{inc.station}</Td>
                     <Td><span className="line-clamp-2 block max-w-xs text-muted-foreground">{inc.details}</span></Td>
                     <Td>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        inc.status === "resolved"    ? "bg-success/15 text-success" :
-                        inc.status === "in_progress" ? "bg-warning/20 text-foreground" :
-                        "bg-destructive/15 text-destructive"
-                      }`}>{inc.status}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${inc.status === "resolved" ? "bg-success/15 text-success" : inc.status === "in_progress" ? "bg-warning/20 text-foreground" : "bg-destructive/15 text-destructive"}`}>{inc.status}</span>
                     </Td>
                     <Td>{new Date(inc.created_at).toLocaleString("en-ZA", { dateStyle: "short", timeStyle: "short" })}</Td>
                     <Td>
                       <div className="flex gap-1">
                         {inc.status !== "in_progress" && inc.status !== "resolved" && (
-                          <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "in_progress")}
-                            className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50">
-                            In progress
-                          </button>
+                          <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "in_progress")} className="rounded-sm border border-warning/40 px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50">In progress</button>
                         )}
                         {inc.status !== "resolved" && (
-                          <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "resolved")}
-                            className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50">
-                            Resolve
-                          </button>
+                          <button disabled={updating === inc.id} onClick={() => updateStatus(inc.id, "resolved")} className="rounded-sm border border-success/40 px-2 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-50">Resolve</button>
                         )}
                       </div>
                     </Td>
@@ -1081,107 +944,430 @@ function SafetyTab({ incidents, onRefresh }: { incidents: SafetyIncident[]; onRe
   );
 }
 
-// ── Timetable Tab — admin adds upcoming trains to DB ─────────────────────────
-const BLANK_TIMETABLE = {
-  train_no: "", line: "Southern Line", from_station: "", to_station: "",
-  departure: "", arrival: "", platform: "", status: "On Time", fare: "",
-};
+// ── Timetable Tab ─────────────────────────────────────────────────────────────
+const BLANK_STOP = { route_id: "", train_no: "", station_name: "", stop_order: 1, departure: "", platform: "" };
 
-function TimetableTab({ entries, onRefresh }: { entries: Record<string, unknown>[]; onRefresh: () => void }) {
-  const [form, setForm] = useState({ ...BLANK_TIMETABLE });
+function TimetableTab({ onRefresh: _onRefresh }: { entries: Record<string, unknown>[]; onRefresh: () => void }) {
+  const [routes, setRoutes] = useState<PrasaRoute[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState("");
+  const [stops, setStops] = useState<TimetableStop[]>([]);
+  const [loadingRoutes, setLoadingRoutes] = useState(true);
+  const [loadingStops, setLoadingStops] = useState(false);
+  const [editingStop, setEditingStop] = useState<typeof BLANK_STOP | null>(null);
   const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState("");
+  const [deletingTrain, setDeletingTrain] = useState("");
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    api.adminTimetableRoutes()
+      .then((r) => { setRoutes(r); if (r.length > 0) setSelectedRoute(r[0].id); })
+      .catch(() => {})
+      .finally(() => setLoadingRoutes(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRoute) return;
+    setLoadingStops(true);
+    api.adminTimetableByRoute(selectedRoute)
+      .then(setStops)
+      .catch(() => setStops([]))
+      .finally(() => setLoadingStops(false));
+  }, [selectedRoute]);
+
+  async function saveStop(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true); setError(""); setSuccess(false);
+    if (!editingStop) return;
+    setSaving(true); setMsg(null);
     try {
-      await api.addTimetableEntry({ ...form, fare: Number(form.fare) });
-      setSuccess(true);
-      setForm({ ...BLANK_TIMETABLE });
-      onRefresh();
+      await api.adminUpsertStop({
+        route_id: editingStop.route_id || selectedRoute,
+        train_no: editingStop.train_no,
+        station_name: editingStop.station_name,
+        stop_order: Number(editingStop.stop_order),
+        departure: editingStop.departure || null,
+        platform: editingStop.platform || undefined,
+      });
+      setMsg({ type: "ok", text: `Stop saved for Train ${editingStop.train_no} at ${editingStop.station_name}.` });
+      setEditingStop(null);
+      // Reload stops
+      const updated = await api.adminTimetableByRoute(selectedRoute);
+      setStops(updated);
     } catch (err) {
-      setError((err as Error).message);
+      setMsg({ type: "err", text: (err as Error).message });
     } finally {
       setSaving(false);
     }
   }
 
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  async function deleteTrain(trainNo: string) {
+    if (!confirm(`Delete ALL stops for Train ${trainNo}?`)) return;
+    setDeletingTrain(trainNo);
+    try {
+      await api.adminDeleteTrain(trainNo);
+      const updated = await api.adminTimetableByRoute(selectedRoute);
+      setStops(updated);
+      setMsg({ type: "ok", text: `Train ${trainNo} removed.` });
+    } catch (err) {
+      setMsg({ type: "err", text: (err as Error).message });
+    } finally {
+      setDeletingTrain("");
+    }
+  }
+
+  // Group stops by train number for display
+  const trainNos = [...new Set(stops.map((s) => s.train_no))].sort();
+
+  const currentRoute = routes.find((r) => r.id === selectedRoute);
 
   return (
     <div className="space-y-6">
-      <div className="rounded-md border border-border bg-card p-5">
-        <h2 className="mb-1 font-semibold text-foreground">Add upcoming train to timetable</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Entries added here are stored in the database and surfaced in the Trip Planner timetable view.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Train No" value={form.train_no} onChange={(v) => set("train_no", v)} />
-            <Field label="From Station" value={form.from_station} onChange={(v) => set("from_station", v)} />
-            <Field label="To Station" value={form.to_station} onChange={(v) => set("to_station", v)} />
-            <Field label="Departure (HH:mm)" value={form.departure} onChange={(v) => set("departure", v)} />
-            <Field label="Arrival (HH:mm)" value={form.arrival} onChange={(v) => set("arrival", v)} />
-            <Field label="Platform" value={form.platform} onChange={(v) => set("platform", v)} />
-            <Field label="Fare (ZAR)" type="number" value={form.fare} onChange={(v) => set("fare", v)} />
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Line</label>
-              <select value={form.line} onChange={(e) => set("line", e.target.value)} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground">
-                {["Southern Line","Northern Line","Central Line","Cape Flats Line"].map((l) => <option key={l}>{l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
-              <select value={form.status} onChange={(e) => set("status", e.target.value)} className="w-full rounded-sm border border-border bg-background px-2 py-1.5 text-sm text-foreground">
-                {["On Time","Delayed","Cancelled"].map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </div>
+      {/* Route selector */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Route</label>
+          <select
+            value={selectedRoute}
+            onChange={(e) => setSelectedRoute(e.target.value)}
+            className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+            disabled={loadingRoutes}
+          >
+            {routes.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.line_name} — {r.direction === "down" ? "↓" : "↑"} {r.from_station} → {r.to_station} ({r.days_of_operation})
+              </option>
+            ))}
+          </select>
+        </div>
+        {currentRoute && (
+          <div className="self-end rounded-sm bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+            {stops.length} stop-times · {trainNos.length} trains
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {success && <p className="rounded-sm bg-success/10 p-2 text-sm text-success">Timetable entry saved to database.</p>}
-          <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60">
-            <Plus className="h-4 w-4" />
-            {saving ? "Saving…" : "Add to timetable"}
-          </button>
-        </form>
+        )}
+        <button
+          onClick={() => setEditingStop({ ...BLANK_STOP, route_id: selectedRoute })}
+          className="self-end flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" /> Add / edit stop
+        </button>
       </div>
 
-      {entries.length > 0 && (
+      {/* Add / edit stop form */}
+      {editingStop && (
+        <div className="rounded-md border border-primary/40 bg-card p-5">
+          <h3 className="mb-3 font-semibold text-foreground">Add or update a stop time</h3>
+          <p className="mb-4 text-xs text-muted-foreground">If the train + station combination already exists it will be updated (upsert).</p>
+          <form onSubmit={saveStop} className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="Train No" value={editingStop.train_no} onChange={(v) => setEditingStop((s) => s && ({ ...s, train_no: v }))} />
+              <Field label="Station Name" value={editingStop.station_name} onChange={(v) => setEditingStop((s) => s && ({ ...s, station_name: v }))} />
+              <Field label="Stop Order" type="number" value={String(editingStop.stop_order)} onChange={(v) => setEditingStop((s) => s && ({ ...s, stop_order: Number(v) }))} />
+              <Field label="Departure (HH:mm or blank to skip)" value={editingStop.departure} onChange={(v) => setEditingStop((s) => s && ({ ...s, departure: v }))} />
+              <Field label="Platform (optional)" value={editingStop.platform} onChange={(v) => setEditingStop((s) => s && ({ ...s, platform: v }))} />
+            </div>
+            {msg && <p className={`rounded-sm p-2 text-sm ${msg.type === "ok" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{msg.text}</p>}
+            <div className="flex gap-2">
+              <button type="submit" disabled={saving} className="flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60">
+                <Check className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save stop"}
+              </button>
+              <button type="button" onClick={() => setEditingStop(null)} className="flex items-center gap-1.5 rounded-sm border border-border px-3 py-1.5 text-sm hover:bg-secondary">
+                <X className="h-3.5 w-3.5" /> Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {msg && !editingStop && (
+        <p className={`rounded-sm p-3 text-sm ${msg.type === "ok" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{msg.text}</p>
+      )}
+
+      {/* Timetable grid grouped by train */}
+      {loadingStops ? (
+        <p className="text-sm text-muted-foreground">Loading timetable…</p>
+      ) : trainNos.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          No timetable data for this route yet. Run <code className="text-xs">npm run seed:timetable</code> to seed the Stellenbosch Line data, or use the form above.
+        </p>
+      ) : (
         <div className="rounded-md border border-border bg-card overflow-x-auto">
-          <div className="border-b border-border px-4 py-3 font-semibold text-foreground">
-            Stored timetable entries ({entries.length})
+          <div className="border-b border-border px-4 py-3">
+            <span className="font-semibold text-foreground">{currentRoute?.line_name} — {currentRoute?.from_station} → {currentRoute?.to_station}</span>
+            <span className="ml-2 text-xs text-muted-foreground">({currentRoute?.days_of_operation})</span>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
               <tr>
-                <Th>Train</Th><Th>Line</Th><Th>Route</Th><Th>Departs</Th><Th>Arrives</Th><Th>Platform</Th><Th>Status</Th><Th>Fare</Th>
+                <Th>Train</Th>
+                <Th>Station</Th>
+                <Th>Order</Th>
+                <Th>Departure</Th>
+                <Th>Platform</Th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody>
-              {entries.map((e, i) => (
-                <tr key={String(e.id ?? i)} className="border-t border-border hover:bg-secondary/30">
-                  <Td>#{String(e.train_no ?? "")}</Td>
-                  <Td>{String(e.line ?? "")}</Td>
-                  <Td>{String(e.from_station ?? "")} → {String(e.to_station ?? "")}</Td>
-                  <Td>{String(e.departure ?? "")}</Td>
-                  <Td>{String(e.arrival ?? "")}</Td>
-                  <Td>{String(e.platform ?? "")}</Td>
-                  <Td><StatusBadge status={String(e.status ?? "On Time")} /></Td>
-                  <Td>R {Number(e.fare ?? 0).toFixed(2)}</Td>
-                </tr>
-              ))}
+              {trainNos.map((trainNo) => {
+                const trainStops = stops.filter((s) => s.train_no === trainNo);
+                return trainStops.map((s, idx) => (
+                  <tr key={`${s.train_no}-${s.stop_order}`} className="border-t border-border hover:bg-secondary/30">
+                    {idx === 0 && (
+                      <td rowSpan={trainStops.length} className="border-r border-border px-4 py-2 align-top font-mono font-semibold text-primary">
+                        #{trainNo}
+                        <button
+                          disabled={deletingTrain === trainNo}
+                          onClick={() => deleteTrain(trainNo)}
+                          className="ml-2 rounded-sm border border-destructive/30 px-1.5 py-0.5 text-[10px] text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          {deletingTrain === trainNo ? "…" : "Del"}
+                        </button>
+                      </td>
+                    )}
+                    <Td>{s.station_name}</Td>
+                    <Td>{s.stop_order}</Td>
+                    <Td>{s.departure ?? <span className="text-xs text-muted-foreground">skip</span>}</Td>
+                    <Td>{(s as any).platform ?? "—"}</Td>
+                    <Td>
+                      <button
+                        onClick={() => setEditingStop({
+                          route_id: selectedRoute,
+                          train_no: s.train_no,
+                          station_name: s.station_name,
+                          stop_order: s.stop_order,
+                          departure: s.departure ?? "",
+                          platform: (s as any).platform ?? "",
+                        })}
+                        className="rounded-sm border border-border p-1 text-muted-foreground hover:bg-secondary"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </Td>
+                  </tr>
+                ));
+              })}
             </tbody>
           </table>
         </div>
       )}
+    </div>
+  );
+}
 
-      {entries.length === 0 && (
-        <p className="rounded-md border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          No timetable entries in the database yet. Use the form above to add upcoming trains.
-        </p>
+// ── Ticket Recovery Tab ───────────────────────────────────────────────────────
+function TicketRecoveryTab({ tickets, onRefresh }: { tickets: AdminTicket[]; onRefresh: () => void }) {
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [lineFilter, setLineFilter] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<AdminTicket[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [selected, setSelected] = useState<AdminTicket | null>(null);
+  const [reissuing, setReissuing] = useState(false);
+  const [reissueResult, setReissueResult] = useState<{ channel: string; status: string; error?: string }[] | null>(null);
+  const [channels, setChannels] = useState<{ email: boolean; sms: boolean }>({ email: true, sms: false });
+
+  useEffect(() => {
+    api.adminTickets().then((data) => { setResults(data); setSearched(true); }).catch(() => {});
+  }, []);
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    setSearching(true);
+    setReissueResult(null);
+    setSelected(null);
+    try {
+      const data = await api.adminTickets({
+        q: q || undefined,
+        status: statusFilter || undefined,
+        line: lineFilter || undefined,
+      });
+      setResults(data);
+      setSearched(true);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function handleReissue() {
+    if (!selected) return;
+    const ch: ("email" | "sms")[] = [];
+    if (channels.email) ch.push("email");
+    if (channels.sms) ch.push("sms");
+    if (!ch.length) return;
+    setReissuing(true);
+    setReissueResult(null);
+    try {
+      const res = await api.reissueTicket(selected.id, ch);
+      setReissueResult(res.results);
+      onRefresh();
+    } catch (err) {
+      setReissueResult([{ channel: "error", status: "failed", error: (err as Error).message }]);
+    } finally {
+      setReissuing(false);
+    }
+  }
+
+  const paid    = tickets.filter((t) => t.payment_status === "paid").length;
+  const pending = tickets.filter((t) => t.payment_status === "pending").length;
+  const used    = tickets.filter((t) => t.used).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-4">
+        <StatCard label="Total Tickets"   value={tickets.length} color="bg-primary" />
+        <StatCard label="Paid"            value={paid}           color="bg-success" />
+        <StatCard label="Pending Payment" value={pending}        color="bg-warning" />
+        <StatCard label="Used / Scanned"  value={used}           color="bg-primary" />
+      </div>
+
+      <div className="rounded-md border border-border bg-card p-5">
+        <h2 className="mb-1 font-semibold text-foreground">Search tickets</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Search by passenger name, ID number, email, phone, booking reference, or transaction ID.</p>
+        <form onSubmit={handleSearch} className="flex flex-wrap gap-2">
+          <div className="relative min-w-60 flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, ID, email, phone, TKT-ref, transaction ID&hellip;" className="w-full rounded-sm border border-border bg-background py-2 pl-8 pr-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+          </div>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-sm border border-border bg-background px-2 py-2 text-sm text-foreground">
+            <option value="">All statuses</option>
+            <option value="paid">Paid</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+          </select>
+          <select value={lineFilter} onChange={(e) => setLineFilter(e.target.value)} className="rounded-sm border border-border bg-background px-2 py-2 text-sm text-foreground">
+            <option value="">All lines</option>
+            {["Southern Line", "Northern Line", "Central Line", "Cape Flats Line"].map((l) => <option key={l}>{l}</option>)}
+          </select>
+          <button type="submit" disabled={searching} className="flex items-center gap-1.5 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60">
+            <Search className="h-4 w-4" />
+            {searching ? "Searching\u2026" : "Search"}
+          </button>
+        </form>
+      </div>
+
+      {searched && (
+        <div className="rounded-md border border-border bg-card">
+          <div className="border-b border-border px-4 py-3 font-semibold text-foreground">
+            Results &mdash; {results.length} ticket{results.length !== 1 ? "s" : ""}
+          </div>
+          {results.length === 0 ? (
+            <p className="p-8 text-center text-sm text-muted-foreground">No tickets found matching your search.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <Th>Reference</Th><Th>Passenger</Th><Th>Contact</Th>
+                    <Th>Route</Th><Th>Train</Th><Th>Departs</Th>
+                    <Th>Fare</Th><Th>Payment</Th><Th>Used</Th><Th>Booked</Th><th className="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((t) => (
+                    <tr
+                      key={t.id}
+                      className={`cursor-pointer border-t border-border hover:bg-secondary/40 ${selected?.id === t.id ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""}`}
+                      onClick={() => { setSelected(t); setReissueResult(null); }}
+                    >
+                      <Td><code className="rounded bg-secondary px-1 py-0.5 text-xs">{t.ticket_ref}</code></Td>
+                      <Td>
+                        <p className="font-medium">{t.passenger_name ?? <span className="italic text-muted-foreground">Unknown</span>}</p>
+                        {t.id_number && <p className="text-xs text-muted-foreground">ID: {t.id_number}</p>}
+                      </Td>
+                      <Td>
+                        {t.email && <p className="text-xs">{t.email}</p>}
+                        {t.phone && <p className="text-xs text-muted-foreground">{t.phone}</p>}
+                      </Td>
+                      <Td>{t.from_station} &rarr; {t.to_station}</Td>
+                      <Td>#{t.train_no} <span className="text-xs text-muted-foreground">{t.line}</span></Td>
+                      <Td>{t.departure}</Td>
+                      <Td>R{Number(t.fare).toFixed(2)}</Td>
+                      <Td>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${t.payment_status === "paid" ? "bg-success/15 text-success" : t.payment_status === "pending" ? "bg-warning/20 text-foreground" : "bg-destructive/15 text-destructive"}`}>{t.payment_status}</span>
+                      </Td>
+                      <Td>
+                        {t.used
+                          ? <span className="text-xs text-muted-foreground">&#10003; {t.used_at ? new Date(t.used_at).toLocaleDateString("en-ZA") : "yes"}</span>
+                          : <span className="text-xs text-success">Active</span>}
+                      </Td>
+                      <Td>{new Date(t.booked_at).toLocaleDateString("en-ZA", { dateStyle: "short" })}</Td>
+                      <Td>
+                        <button onClick={(e) => { e.stopPropagation(); setSelected(t); setReissueResult(null); }} className="rounded-sm border border-primary/40 px-2 py-1 text-xs text-primary hover:bg-primary/10">Select</button>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
+
+      {selected && (
+        <div className="rounded-md border border-primary/30 bg-card p-5 space-y-4">
+          <h3 className="flex items-center gap-2 font-semibold text-foreground">
+            <Ticket className="h-4 w-4 text-primary" />
+            Ticket details &mdash; {selected.ticket_ref}
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Detail label="Passenger name"  value={selected.passenger_name ?? "\u2014"} />
+            <Detail label="ID number"       value={selected.id_number ?? "\u2014"} />
+            <Detail label="Email"           value={selected.email ?? "\u2014"} />
+            <Detail label="Phone"           value={selected.phone ?? "\u2014"} />
+            <Detail label="Route"           value={`${selected.from_station} \u2192 ${selected.to_station}`} />
+            <Detail label="Train"           value={`#${selected.train_no} \u00b7 ${selected.line}`} />
+            <Detail label="Departure"       value={selected.departure} />
+            <Detail label="Arrival"         value={selected.arrival ?? "\u2014"} />
+            <Detail label="Fare"            value={`R${Number(selected.fare).toFixed(2)}`} />
+            <Detail label="Travel class"    value={selected.travel_class} />
+            <Detail label="Payment status"  value={selected.payment_status.toUpperCase()} />
+            <Detail label="Transaction ID"  value={selected.payment_intent_id ?? "\u2014"} mono />
+            <Detail label="Booked at"       value={new Date(selected.booked_at).toLocaleString("en-ZA")} />
+            <Detail label="Ticket used"     value={selected.used ? `Yes${selected.used_at ? ` \u2014 ${new Date(selected.used_at).toLocaleString("en-ZA")}` : ""}` : "No \u2014 still active"} />
+          </div>
+          <div className="border-t border-border pt-4">
+            <p className="mb-3 text-sm font-medium text-foreground">Reissue / resend ticket to passenger</p>
+            <div className="mb-3 flex flex-wrap gap-4 text-sm">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={channels.email} onChange={(e) => setChannels((c) => ({ ...c, email: e.target.checked }))} disabled={!selected.email} />
+                <span className={!selected.email ? "text-muted-foreground line-through" : ""}>
+                  Email{selected.email ? ` (${selected.email})` : " \u2014 no email on record"}
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={channels.sms} onChange={(e) => setChannels((c) => ({ ...c, sms: e.target.checked }))} disabled={!selected.phone} />
+                <span className={!selected.phone ? "text-muted-foreground line-through" : ""}>
+                  SMS{selected.phone ? ` (${selected.phone})` : " \u2014 no phone on record"}
+                </span>
+              </label>
+            </div>
+            {reissueResult && (
+              <div className="mb-3 space-y-1">
+                {reissueResult.map((r, i) => (
+                  <p key={i} className={`rounded-sm px-3 py-1.5 text-sm ${r.status === "sent" ? "bg-success/10 text-success" : r.status === "skipped" ? "bg-secondary text-muted-foreground" : "bg-destructive/10 text-destructive"}`}>
+                    {r.channel.toUpperCase()}: {r.status}{r.error ? ` \u2014 ${r.error}` : ""}
+                  </p>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={handleReissue} disabled={reissuing || (!channels.email && !channels.sms)} className="flex items-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60">
+                <RotateCcw className="h-4 w-4" />
+                {reissuing ? "Sending\u2026" : "Reissue ticket"}
+              </button>
+              <button onClick={() => { setSelected(null); setReissueResult(null); }} className="rounded-sm border border-border px-3 py-2 text-sm hover:bg-secondary">Clear</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`mt-0.5 text-sm text-foreground ${mono ? "break-all font-mono text-xs" : ""}`}>{value}</p>
     </div>
   );
 }

@@ -41,8 +41,12 @@ create index if not exists idx_train_updates_updated_at on train_updates (update
 create table if not exists tickets (
   id                 uuid primary key default gen_random_uuid(),
   ticket_ref         text not null unique,
-  qr_token           text not null unique,          -- one-time scannable token
+  qr_token           text not null unique,
   user_id            uuid,
+  passenger_name     text,
+  id_number          text,
+  phone              text,
+  email              text,
   train_no           text not null,
   line               text not null,
   from_station       text not null,
@@ -51,13 +55,33 @@ create table if not exists tickets (
   arrival            text,
   fare               numeric default 0,
   travel_class       text default 'Metro',
-  payment_intent_id  text unique,                   -- Stripe PaymentIntent id
-  payment_status     text default 'pending'         -- pending | paid | failed
+  payment_intent_id  text unique,
+  payment_status     text default 'pending'
                        check (payment_status in ('pending','paid','failed')),
-  used               boolean default false,         -- ticket has been scanned
+  used               boolean default false,
   used_at            timestamptz,
   booked_at          timestamptz default now()
 );
+
+-- alter existing tables to add new columns (safe to run on existing DBs)
+alter table tickets add column if not exists passenger_name text;
+alter table tickets add column if not exists id_number text;
+alter table tickets add column if not exists phone text;
+alter table tickets add column if not exists email text;
+
+-- ── Ticket recovery audit log ─────────────────────────────────────────────────
+create table if not exists ticket_recovery_log (
+  id           bigserial primary key,
+  ticket_id    uuid references tickets(id) on delete cascade,
+  ticket_ref   text not null,
+  action       text not null,  -- 'search' | 'reissue_email' | 'reissue_sms'
+  performed_by text default 'admin',
+  note         text,
+  created_at   timestamptz default now()
+);
+
+create index if not exists idx_ticket_recovery_ticket_id on ticket_recovery_log (ticket_id);
+create index if not exists idx_ticket_recovery_created_at on ticket_recovery_log (created_at desc);
 
 create index if not exists idx_tickets_user_id         on tickets (user_id);
 create index if not exists idx_tickets_booked_at       on tickets (booked_at desc);
@@ -153,3 +177,51 @@ create table if not exists station_cache (
 );
 
 create index if not exists idx_station_cache_cached_at on station_cache (cached_at desc);
+
+-- ── PRASA Official Timetable ──────────────────────────────────────────────────
+-- Scalable schema: add any future PRASA line by inserting into these 3 tables.
+
+-- Routes (one row per direction per line)
+create table if not exists prasa_routes (
+  id          text primary key,           -- e.g. 'stellenbosch-down'
+  line_name   text not null,              -- e.g. 'Stellenbosch Line'
+  direction   text not null,              -- 'down' | 'up'
+  from_station text not null,
+  to_station   text not null,
+  days_of_operation text default 'Mon-Fri',
+  created_at  timestamptz default now()
+);
+
+-- Stations per route (ordered stop list)
+create table if not exists prasa_stations (
+  id           bigserial primary key,
+  route_id     text not null references prasa_routes(id) on delete cascade,
+  station_name text not null,
+  stop_order   integer not null,
+  lat          numeric,
+  lng          numeric,
+  unique(route_id, stop_order)
+);
+
+create index if not exists idx_prasa_stations_route on prasa_stations(route_id);
+create index if not exists idx_prasa_stations_name  on prasa_stations(station_name);
+
+-- Individual train stop times
+create table if not exists prasa_timetable (
+  id           bigserial primary key,
+  route_id     text not null references prasa_routes(id) on delete cascade,
+  train_no     text not null,
+  station_name text not null,
+  stop_order   integer not null,
+  departure    text,                      -- HH:mm or null if train skips stop
+  platform     text,
+  created_at   timestamptz default now(),
+  unique(route_id, train_no, station_name)
+);
+
+create index if not exists idx_prasa_timetable_route   on prasa_timetable(route_id);
+create index if not exists idx_prasa_timetable_train   on prasa_timetable(train_no);
+create index if not exists idx_prasa_timetable_station on prasa_timetable(station_name);
+create index if not exists idx_prasa_timetable_depart  on prasa_timetable(departure);
+
+-- unique constraint is defined inline on the table above (see prasa_timetable)

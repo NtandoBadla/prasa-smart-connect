@@ -52,6 +52,8 @@ function SearchPage() {
   const [ticketModal, setTicketModal] = useState<TrainSchedule | null>(null);
   const [generatedTicket, setGeneratedTicket] = useState<{ ticket_ref: string; booked_at: string } | null>(null);
   const [ticketLoading, setTicketLoading] = useState(false);
+  const [passengerForm, setPassengerForm] = useState({ name: "", idNumber: "", email: "", phone: "" });
+  const [passengerStep, setPassengerStep] = useState<TrainSchedule | null>(null);
 
   useEffect(() => {
     api.schedules().then(setLiveSchedules).catch(() => {});
@@ -80,16 +82,27 @@ function SearchPage() {
   const [paymentClientSecret, setPaymentClientSecret] = useState<string | null>(null);
   const [paymentTicketRef, setPaymentTicketRef] = useState("");
 
-  const handleOpenPayment = async (train: TrainSchedule) => {
+  // Step 1: open passenger details form
+  const handleOpenPayment = (train: TrainSchedule) => {
+    setPassengerForm({ name: "", idNumber: "", email: "", phone: "" });
+    setPassengerStep(train);
+  };
+
+  // Step 2: confirmed passenger details — proceed to payment or direct generate
+  const handleConfirmPassenger = async (train: TrainSchedule) => {
     if (!stripePromise) {
-      // No Stripe key — generate ticket directly
       setTicketLoading(true);
       try {
         const ticket = await api.generateTicket({
           trainNo: train.trainNo, line: train.line,
           from: train.from, to: train.to,
           departure: train.departure, arrival: train.arrival, fare: train.fare,
+          passengerName: passengerForm.name || undefined,
+          idNumber: passengerForm.idNumber || undefined,
+          email: passengerForm.email || undefined,
+          phone: passengerForm.phone || undefined,
         });
+        setPassengerStep(null);
         setGeneratedTicket({ ticket_ref: ticket.ticket_ref, booked_at: ticket.booked_at });
       } catch (e: any) {
         alert(e.message ?? "Could not generate ticket.");
@@ -104,9 +117,14 @@ function SearchPage() {
         trainNo: train.trainNo, line: train.line,
         from: train.from, to: train.to,
         departure: train.departure, arrival: train.arrival, fare: train.fare,
+        passengerName: passengerForm.name || undefined,
+        idNumber: passengerForm.idNumber || undefined,
+        email: passengerForm.email || undefined,
+        phone: passengerForm.phone || undefined,
       });
       setPaymentClientSecret(clientSecret);
       setPaymentTicketRef(ticketRef);
+      setPassengerStep(null);
       setTicketModal(train);
     } catch (e: any) {
       alert(e.message ?? "Could not initiate payment.");
@@ -165,6 +183,84 @@ function SearchPage() {
           </>
         )}
       </section>
+
+      {/* Passenger Details Modal */}
+      {passengerStep && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16">
+          <div className="w-full max-w-md rounded-md border border-border bg-card p-6 shadow-elevated">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-foreground">Passenger Details</h3>
+              <button onClick={() => setPassengerStep(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mb-4 space-y-1 rounded-sm bg-secondary/40 p-3 text-sm">
+              <Row label="Route"   value={`${passengerStep.from} → ${passengerStep.to}`} />
+              <Row label="Train"   value={`#${passengerStep.trainNo} · ${passengerStep.line}`} />
+              <Row label="Departs" value={passengerStep.departure} />
+              <Row label="Fare"    value={`R ${passengerStep.fare.toFixed(2)}`} />
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Full name <span className="text-destructive">*</span></label>
+                <input
+                  required
+                  value={passengerForm.name}
+                  onChange={(e) => setPassengerForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Thabo Nkosi"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">ID / Passport number</label>
+                <input
+                  value={passengerForm.idNumber}
+                  onChange={(e) => setPassengerForm((f) => ({ ...f, idNumber: e.target.value }))}
+                  placeholder="SA ID or passport number"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Email address</label>
+                <input
+                  type="email"
+                  value={passengerForm.email}
+                  onChange={(e) => setPassengerForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="you@example.com"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone number</label>
+                <input
+                  type="tel"
+                  value={passengerForm.phone}
+                  onChange={(e) => setPassengerForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="0821234567"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Your details are used for ticket recovery and resending only.</p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setPassengerStep(null)}
+                  className="flex-1 rounded-sm border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!passengerForm.name.trim() || ticketLoading}
+                  onClick={() => handleConfirmPassenger(passengerStep)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {ticketLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ticket className="h-4 w-4" />}
+                  {ticketLoading ? "Processing…" : "Continue"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Modal */}
       {ticketModal && paymentClientSecret && (

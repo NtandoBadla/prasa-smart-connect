@@ -86,22 +86,49 @@ export async function sendNotification(payload: NotifyPayload): Promise<void> {
   );
 }
 
+// Normalise SA phone numbers to +27XXXXXXXXX for SMSPortal
+function normaliseSAPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("27") && digits.length === 11) return `+${digits}`;
+  if (digits.startsWith("0") && digits.length === 10) return `+27${digits.slice(1)}`;
+  return phone; // return as-is if already formatted or unrecognised
+}
+
+let _smsToken: string | null = null;
+let _smsTokenExpiry = 0;
+
+async function getSmsToken(): Promise<string> {
+  if (_smsToken && Date.now() < _smsTokenExpiry) return _smsToken;
+  const clientId     = process.env.SMSPORTAL_CLIENT_ID!;
+  const clientSecret = process.env.SMSPORTAL_CLIENT_SECRET!;
+  const authRes = await axios.get("https://rest.smsportal.com/v1/Authentication", {
+    auth: { username: clientId, password: clientSecret },
+    timeout: 10_000,
+  });
+  _smsToken = authRes.data.token as string;
+  // SMSPortal tokens are valid for 1 hour — cache for 55 min
+  _smsTokenExpiry = Date.now() + 55 * 60 * 1000;
+  return _smsToken;
+}
+
 export async function sendSms(phone: string, message: string): Promise<void> {
-  const apiKey   = process.env.TEXTBEE_API_KEY;
-  const deviceId = process.env.TEXTBEE_DEVICE_ID;
-  if (!apiKey || !deviceId) {
-    console.warn("TextBee env vars not set — skipping SMS to", phone);
+  const clientId     = process.env.SMSPORTAL_CLIENT_ID;
+  const clientSecret = process.env.SMSPORTAL_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    console.warn("SMSPortal env vars not set — skipping SMS to", phone);
     return;
   }
+  const destination = normaliseSAPhone(phone);
   try {
-    await axios.post(
-      `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`,
-      { receivers: [phone], message },
-      { headers: { "x-api-key": apiKey }, timeout: 10_000 },
+    const token = await getSmsToken();
+    const res = await axios.post(
+      "https://rest.smsportal.com/v1/BulkMessages",
+      { messages: [{ content: message, destination }] },
+      { headers: { Authorization: `Bearer ${token}` }, timeout: 10_000 },
     );
-    console.log(`[SMS] Sent via TextBee to ${phone}`);
+    console.log(`[SMS] Sent via SMSPortal to ${destination}`, res.data?.results?.[0] ?? "");
   } catch (err: any) {
-    console.error(`[SMS] TextBee failed for ${phone}:`, err?.message ?? err);
+    console.error(`[SMS] SMSPortal failed for ${destination}:`, err?.response?.data ?? err?.message ?? err);
     throw err;
   }
 }

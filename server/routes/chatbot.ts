@@ -3,12 +3,37 @@ import axios from "axios";
 import { ChatbotSchema } from "../validate";
 import { runScrape } from "../scraper";
 import { supabase } from "../db";
-import { STATIONS, SCHEDULES } from "../../src/data/prasa";
+import { STATIONS, SCHEDULES, STATION_COORDS } from "../../src/data/prasa";
 import { crowdingAdvice, getCrowding, bestCoach } from "../../src/data/extras";
 
 const router = Router();
 
 // ── Fetch all live context from Supabase ──────────────────────────────────────
+// ── Official timetable helpers (Supabase) ──────────────────────────────────────
+async function queryTimetable(from: string, to: string): Promise<any[]> {
+  try {
+    const [{ data: fromStops }, { data: toStops }] = await Promise.all([
+      supabase.from("prasa_timetable").select("route_id,train_no,stop_order,departure").ilike("station_name", from).not("departure", "is", null),
+      supabase.from("prasa_timetable").select("route_id,train_no,stop_order,departure").ilike("station_name", to).not("departure", "is", null),
+    ]);
+    if (!fromStops?.length || !toStops?.length) return [];
+    const results: any[] = [];
+    for (const f of fromStops) {
+      const match = toStops.find((t) => t.route_id === f.route_id && t.train_no === f.train_no && t.stop_order > f.stop_order);
+      if (!match) continue;
+      results.push({ train_no: f.train_no, route_id: f.route_id, from_station: from, to_station: to, departure: f.departure, arrival: match.departure });
+    }
+    return results.sort((a, b) => a.departure.localeCompare(b.departure));
+  } catch { return []; }
+}
+
+async function queryTrainStops(trainNo: string): Promise<any[]> {
+  try {
+    const { data } = await supabase.from("prasa_timetable").select("station_name,stop_order,departure").eq("train_no", trainNo).not("departure", "is", null).order("stop_order", { ascending: true });
+    return data ?? [];
+  } catch { return []; }
+}
+
 async function fetchContext() {
   const [
     { trains: liveTrains, notices: liveNotices },
@@ -98,6 +123,62 @@ router.post("/", async (req, res) => {
 
   const { trains, notices, adminUpdates } = await fetchContext();
 
+  // Check for specific train number query (e.g. "train 3405", "train no 3407")
+  const trainNoMatch = message.match(/\b(3[34]\d{2})\b/);
+
+  // ── Official timetable queries — always checked first ────────────────────
+  if (trainNoMatch) {
+    const stops = await queryTrainStops(trainNoMatch[1]);
+    if (stops.length > 0) {
+      let reply = `**Train ${trainNoMatch[1]} — Stellenbosch Line stops:**\n\n`;
+      reply += `| # | Station | Departure |\n|---|---------|-----------|\n`;
+      reply += stops.map((s, i) => `| ${i + 1} | ${s.station_name} | ${s.departure} |`).join("\n");
+      res.json({ reply }); return;
+    }
+  }
+
+  if (from && to) {
+    const ttResults = await queryTimetable(from, to);
+    if (ttResults.length > 0) {
+      const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+      const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+      const upcoming = ttResults.filter((r) => toMin(r.departure) >= nowMins);
+      const display = (upcoming.length > 0 ? upcoming : ttResults).slice(0, 6);
+      let reply = `**Official timetable — ${from} \u2192 ${to} (Stellenbosch Line):**\n\n`;
+      reply += `| Train | Departs | Arrives | Duration |\n|-------|---------|---------|----------|\n`;
+      reply += display.map((r) => {
+        const dep = toMin(r.departure);
+        const arr = toMin(r.arrival);
+        const dur = arr >= dep ? arr - dep : arr + 1440 - dep;
+        return `| ${r.train_no} | ${r.departure} | ${r.arrival} | ${dur} min |`;
+      }).join("\n");
+      if (upcoming.length === 0) reply += `\n\n_No more trains today — showing full timetable._`;
+      res.json({ reply }); return;
+    }
+  }
+
+  // Also check reverse direction in case user said "Cape Town to Du Toit" but timetable has it stored as down route
+  if (from && to) {
+    const ttReverse = await queryTimetable(to, from);
+    if (ttReverse.length > 0) {
+      // Re-run with corrected direction
+      const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+      const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+      const upcoming = ttReverse.filter((r) => toMin(r.departure) >= nowMins);
+      const display = (upcoming.length > 0 ? upcoming : ttReverse).slice(0, 6);
+      let reply = `**Official timetable — ${to} \u2192 ${from} (Stellenbosch Line):**\n\n`;
+      reply += `| Train | Departs | Arrives | Duration |\n|-------|---------|---------|----------|\n`;
+      reply += display.map((r) => {
+        const dep = toMin(r.departure);
+        const arr = toMin(r.arrival);
+        const dur = arr >= dep ? arr - dep : arr + 1440 - dep;
+        return `| ${r.train_no} | ${r.departure} | ${r.arrival} | ${dur} min |`;
+      }).join("\n");
+      if (upcoming.length === 0) reply += `\n\n_No more trains today — showing full timetable._`;
+      res.json({ reply }); return;
+    }
+  }
+
   // Always try rule-based first — covers fares, greetings, coach, arrival, crowding, contact
   const needsLiveAI = apiKey && /(delay|cancel|status|disruption|suspend|on time|running|what.*happening|any.*problem|latest|update|live|current|today|now)/.test(lower)
     && !/(fare|price|cost|how much|rand|zar|pay|charge|hi|hello|hey|howzit|safe|coach|crowd|contact|call centre|next stop|next station|platform|exit|arriving)/.test(lower);
@@ -154,87 +235,109 @@ function detectStations(text: string): { from?: string; to?: string } {
 }
 
 // ── Arrival assistant ────────────────────────────────────────────────────────
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+// Average train speed on Cape Town Metrorail (km/h) — used for ETA estimates
+const AVG_SPEED_KMH = 45;
+
 function arrivalAssistantReply(message: string, trains: any[], from?: string, to?: string): string {
-  const lower = message.toLowerCase();
+  if (!from) {
+    return `Please tell me your current station — e.g. "Next stop from Cape Town to Claremont".`;
+  }
 
-  // Try live trains first
-  const relevantLive = trains.filter((t: any) => {
-    const row = `${t.from_station} ${t.to_station} ${t.line}`.toLowerCase();
-    if (from && to) return row.includes(from.toLowerCase()) || row.includes(to.toLowerCase());
-    if (from) return row.includes(from.toLowerCase());
-    if (to) return row.includes(to.toLowerCase());
-    return false;
-  });
+  // Find the best schedule: matches from→to and departs closest to now
+  const nowMins = (() => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); })();
 
-  // Fall back to schedule data for stop/platform info
-  const schedule = SCHEDULES.find((s) => {
+  const candidates = SCHEDULES.filter((s) => {
     const stops = s.stops.map((x) => x.toLowerCase());
-    if (from && to) {
-      const fi = stops.indexOf(from.toLowerCase());
-      const ti = stops.indexOf(to.toLowerCase());
-      return fi !== -1 && ti !== -1 && fi < ti;
-    }
-    if (from) return stops.includes(from.toLowerCase());
-    if (to) return stops.includes(to.toLowerCase());
-    return false;
+    const fi = stops.indexOf(from.toLowerCase());
+    const ti = to ? stops.indexOf(to.toLowerCase()) : fi + 1;
+    return fi !== -1 && ti !== -1 && fi < ti;
+  }).sort((a, b) => {
+    // Prefer trains that depart at or after now; wrap around midnight
+    const [ah, am] = a.departure.split(":").map(Number);
+    const [bh, bm] = b.departure.split(":").map(Number);
+    const aMin = ah * 60 + am;
+    const bMin = bh * 60 + bm;
+    const aDiff = aMin >= nowMins ? aMin - nowMins : aMin + 1440 - nowMins;
+    const bDiff = bMin >= nowMins ? bMin - nowMins : bMin + 1440 - nowMins;
+    return aDiff - bDiff;
   });
 
-  if (!schedule && relevantLive.length === 0) {
-    return `I couldn't find a matching train for that route. Please specify your departure station — e.g. "Next stop from Cape Town to Claremont".`;
-  }
+  const src = candidates[0];
 
-  const src = schedule;
-  if (src) {
-    const fromIdx = from ? src.stops.map((x) => x.toLowerCase()).indexOf(from.toLowerCase()) : 0;
-    const toIdx   = to   ? src.stops.map((x) => x.toLowerCase()).indexOf(to.toLowerCase())   : src.stops.length - 1;
-
-    // Determine "current" stop (use from or first stop)
-    const currentIdx = Math.max(fromIdx, 0);
-    const nextIdx    = Math.min(currentIdx + 1, src.stops.length - 1);
-    const nextStop   = src.stops[nextIdx];
-    const finalStop  = src.stops[toIdx !== -1 ? toIdx : src.stops.length - 1];
-
-    // Estimate arrival at next stop
-    const perStopMins = Math.round(src.durationMin / (src.stops.length - 1));
-    const stopsRemaining = toIdx - currentIdx;
-    const etaMin = stopsRemaining * perStopMins;
-    const [h, m] = src.departure.split(":").map(Number);
-    const arrivalTotal = h * 60 + m + (currentIdx + 1) * perStopMins;
-    const arrHH = String(Math.floor(arrivalTotal / 60) % 24).padStart(2, "0");
-    const arrMM = String(arrivalTotal % 60).padStart(2, "0");
-
-    // Platform / exit suggestion: platform from schedule
-    const platformInfo = src.platform !== "—" ? `Platform **${src.platform}**` : "check the platform board";
-
-    // Exit side tip — Cape Town terminus always platform side, Southern Line exits vary
-    const exitTip = finalStop === "Cape Town"
-      ? "Exit through the main concourse towards Adderley Street."
-      : finalStop === "Simon's Town"
-        ? "Exit towards the waterfront — follow signs to Jubilee Square."
-        : finalStop === "Stellenbosch"
-          ? "Exit platform left toward Dorp Street and the town centre."
-          : `Exit at ${finalStop} and follow the overhead signs.`;
-
-    let reply = `**Arrival Assistant — Train #${src.trainNo} (${src.line})**\n\n`;
-    reply += `| Detail | Info |\n`;
-    reply += `|--------|------|\n`;
-    reply += `| Next stop | **${nextStop}** |\n`;
-    reply += `| Arrival at next stop | ~${arrHH}:${arrMM} |\n`;
-    reply += `| Your destination | **${finalStop}** |\n`;
-    reply += `| ETA to destination | ~${etaMin} min |\n`;
-    reply += `| Suggested platform | ${platformInfo} |\n`;
-    reply += `\n💡 **Exit tip:** ${exitTip}`;
-
-    if (src.status === "Delayed" && src.delayMin) {
-      reply += `\n\n⚠ This train is currently delayed by **${src.delayMin} minutes**.`;
+  if (!src) {
+    // Fall back to live scraped data
+    const t = trains.find((x: any) => {
+      const row = `${x.from_station} ${x.to_station}`.toLowerCase();
+      return row.includes(from.toLowerCase()) || (to && row.includes(to.toLowerCase()));
+    });
+    if (t) {
+      return `**Live train:** ${t.train_no} (${t.line}) — ${t.from_station} → ${t.to_station}\nDeparture: ${t.departure || "—"} | Status: ${t.status}${t.delay_min ? ` (+${t.delay_min}min)` : ""}\n\nFor detailed stop-by-stop info specify both stations.`;
     }
-
-    return reply;
+    return `No train found between **${from}**${to ? ` and **${to}**` : ""}. Check cttrains.co.za for live schedules.`;
   }
 
-  // Live train fallback
-  const t = relevantLive[0];
-  return `**Live train update:** Train ${t.train_no} (${t.line}) — ${t.from_station} → ${t.to_station}\nStatus: ${t.status}${t.delay_min ? ` (+${t.delay_min}min)` : ""}\n\nFor next stop details please specify both your current station and destination.`;
+  const stops = src.stops;
+  const fromIdx = stops.map((x) => x.toLowerCase()).indexOf(from.toLowerCase());
+  const toIdx   = to ? stops.map((x) => x.toLowerCase()).indexOf(to.toLowerCase()) : stops.length - 1;
+  const nextIdx = Math.min(fromIdx + 1, stops.length - 1);
+  const nextStop = stops[nextIdx];
+  const finalStop = stops[toIdx !== -1 ? toIdx : stops.length - 1];
+
+  // Per-stop duration using haversine + avg speed
+  function etaBetween(iA: number, iB: number): number {
+    let totalKm = 0;
+    for (let i = iA; i < iB; i++) {
+      const a = STATION_COORDS[stops[i]];
+      const b = STATION_COORDS[stops[i + 1]];
+      if (a && b) totalKm += haversineKm(a, b);
+    }
+    return Math.round((totalKm / AVG_SPEED_KMH) * 60);
+  }
+
+  const minsToNext = etaBetween(fromIdx, nextIdx);
+  const minsToDest = etaBetween(fromIdx, toIdx !== -1 ? toIdx : stops.length - 1);
+
+  // Departure time from the "from" station
+  const [dh, dm] = src.departure.split(":").map(Number);
+  const depFromMins = dh * 60 + dm + etaBetween(0, fromIdx);
+  const nextArrMins = depFromMins + minsToNext;
+  const destArrMins = depFromMins + minsToDest;
+  const fmt = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+  const platformInfo = src.platform !== "—" ? `Platform **${src.platform}**` : "Check platform board";
+
+  const delayNote = src.status === "Delayed" && src.delayMin
+    ? `\n\n⚠ This train is currently delayed by **${src.delayMin} minutes**.`
+    : "";
+
+  let reply = `**Next Train — #${src.trainNo} (${src.line})**\n\n`;
+  reply += `| Detail | Info |\n|--------|------|\n`;
+  reply += `| Departing | **${src.departure}** from ${stops[0]} |\n`;
+  reply += `| Your board station | **${from}** (~${fmt(depFromMins)}) |\n`;
+  reply += `| Next stop | **${nextStop}** (~${fmt(nextArrMins)}, ${minsToNext} min) |\n`;
+  reply += `| Your destination | **${finalStop}** (~${fmt(destArrMins)}) |\n`;
+  reply += `| Travel time to destination | ~${minsToDest} min |\n`;
+  reply += `| Platform at origin | ${platformInfo} |\n`;
+
+  // Show all remaining stops with estimated times
+  reply += `\n**Remaining stops from ${from}:**\n| Stop | Est. Arrival |\n|------|-------------|\n`;
+  for (let i = fromIdx + 1; i <= (toIdx !== -1 ? toIdx : stops.length - 1); i++) {
+    const eta = depFromMins + etaBetween(fromIdx, i);
+    reply += `| ${stops[i]} | ~${fmt(eta)} |\n`;
+  }
+
+  reply += delayNote;
+  return reply;
 }
 
 // ── Safe coach recommendation ─────────────────────────────────────────────────

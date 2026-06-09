@@ -1,5 +1,56 @@
 const BASE = (import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL ?? "")) + "/api";
 
+export interface AdminTicket {
+  id: string;
+  ticket_ref: string;
+  qr_token: string;
+  user_id: string | null;
+  passenger_name: string | null;
+  id_number: string | null;
+  phone: string | null;
+  email: string | null;
+  train_no: string;
+  line: string;
+  from_station: string;
+  to_station: string;
+  departure: string;
+  arrival: string | null;
+  fare: number;
+  travel_class: string;
+  payment_intent_id: string | null;
+  payment_status: "pending" | "paid" | "failed";
+  used: boolean;
+  used_at: string | null;
+  booked_at: string;
+}
+
+export interface TimetableResult {
+  train_no: string;
+  route_id: string;
+  from_station: string;
+  to_station: string;
+  departure: string;
+  arrival: string;
+  duration_min: number;
+}
+
+export interface TimetableStop {
+  train_no: string;
+  route_id: string;
+  station_name: string;
+  stop_order: number;
+  departure: string | null;
+}
+
+export interface PrasaRoute {
+  id: string;
+  line_name: string;
+  direction: string;
+  from_station: string;
+  to_station: string;
+  days_of_operation: string;
+}
+
 function getToken() {
   return localStorage.getItem("admin_token") ?? "";
 }
@@ -145,6 +196,10 @@ export const api = {
     arrival: string;
     fare: number;
     travelClass?: string;
+    passengerName?: string;
+    idNumber?: string;
+    phone?: string;
+    email?: string;
   }) => apiFetch<{ clientSecret: string; ticketId: string; ticketRef: string }>(
     "/tickets/create-payment-intent",
     { method: "POST", body: JSON.stringify(data) },
@@ -171,6 +226,10 @@ export const api = {
     arrival: string;
     fare: number;
     travelClass?: string;
+    passengerName?: string;
+    idNumber?: string;
+    phone?: string;
+    email?: string;
   }) => apiFetch<{
     id: string; ticket_ref: string; qr_token: string;
     train_no: string; line: string; from_station: string; to_station: string;
@@ -367,4 +426,62 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+
+  // ── Admin: Ticket Recovery ──────────────────────────────────────────────────
+  adminTickets: (params?: { q?: string; status?: string; line?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.q)      qs.set("q", params.q);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.line)   qs.set("line", params.line);
+    const query = qs.toString() ? `?${qs.toString()}` : "";
+    return apiFetch<AdminTicket[]>(`/admin/tickets${query}`);
+  },
+
+  reissueTicket: (ticketId: string, channels: ("email" | "sms")[]) =>
+    apiFetch<{ ticket_ref: string; results: { channel: string; status: string; error?: string }[] }>(
+      "/admin/tickets/reissue",
+      { method: "POST", body: JSON.stringify({ ticketId, channels }) },
+    ),
+
+  ticketRecoveryLog: () =>
+    apiFetch<{ id: number; ticket_id: string; ticket_ref: string; action: string; note: string; created_at: string }[]>(
+      "/admin/tickets/recovery-log",
+    ),
+
+  // ── Official PRASA Timetable ─────────────────────────────────────────────────
+  timetableSearch: (from: string, to: string, time?: string) => {
+    const q = new URLSearchParams({ from, to, ...(time ? { time } : {}) });
+    return apiFetch<TimetableResult[]>(`/timetable/search?${q}`);
+  },
+
+  timetableTrain: (trainNo: string) =>
+    apiFetch<TimetableStop[]>(`/timetable/train/${encodeURIComponent(trainNo)}`),
+
+  timetableRoutes: () =>
+    apiFetch<PrasaRoute[]>(`/timetable/routes`),
+
+  timetableStations: (routeId: string) =>
+    apiFetch<{ station_name: string; stop_order: number; lat: number; lng: number }[]>(
+      `/timetable/stations/${encodeURIComponent(routeId)}`
+    ),
+
+  timetableNext: (station: string, direction?: string, limit = 5) => {
+    const q = new URLSearchParams({ station, limit: String(limit), ...(direction ? { direction } : {}) });
+    return apiFetch<TimetableStop[]>(`/timetable/next?${q}`);
+  },
+
+  // ── Admin: PRASA Timetable management ────────────────────────────────────────
+  adminTimetableRoutes: () =>
+    apiFetch<PrasaRoute[]>(`/timetable/routes`),
+
+  adminTimetableByRoute: (routeId: string) =>
+    apiFetch<(TimetableStop & { platform: string | null })[]>(`/timetable/train/by-route/${encodeURIComponent(routeId)}`),
+
+  adminUpsertStop: (data: {
+    route_id: string; train_no: string; station_name: string;
+    stop_order: number; departure: string | null; platform?: string;
+  }) => apiFetch<TimetableStop>(`/timetable/admin/stop`, { method: "POST", body: JSON.stringify(data) }),
+
+  adminDeleteTrain: (trainNo: string) =>
+    apiFetch<{ ok: boolean }>(`/timetable/admin/train/${encodeURIComponent(trainNo)}`, { method: "DELETE" }),
 };

@@ -89,6 +89,8 @@ function FaresPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initiating, setInitiating] = useState(false);
   const [initError, setInitError] = useState("");
+  const [passengerForm, setPassengerForm] = useState({ name: "", idNumber: "", email: "", phone: "" });
+  const [showPassenger, setShowPassenger] = useState(false);
 
   const matchedTrain = useMemo(() => searchTrains(from, to)[0] ?? null, [from, to]);
   const baseFare = matchedTrain?.fare ?? 0;
@@ -96,16 +98,20 @@ function FaresPage() {
 
   const resetPayment = () => { setClientSecret(null); setInitError(""); };
 
-  async function handleGenerateTicket() {
+  async function handleConfirmPassenger() {
+    setShowPassenger(false);
     if (!matchedTrain || !total) return;
     if (!stripePromise) {
-      // No Stripe key — generate ticket directly
       setInitiating(true);
       try {
         const t = await api.generateTicket({
           trainNo: matchedTrain.trainNo, line: matchedTrain.line,
           from, to, departure: matchedTrain.departure, arrival: matchedTrain.arrival,
           fare: total, travelClass: cls,
+          passengerName: passengerForm.name || undefined,
+          idNumber: passengerForm.idNumber || undefined,
+          email: passengerForm.email || undefined,
+          phone: passengerForm.phone || undefined,
         });
         setPaidTicket({ ticket_ref: t.ticket_ref, booked_at: t.booked_at });
       } catch (e: any) {
@@ -122,6 +128,10 @@ function FaresPage() {
         trainNo: matchedTrain.trainNo, line: matchedTrain.line,
         from, to, departure: matchedTrain.departure, arrival: matchedTrain.arrival,
         fare: total, travelClass: cls,
+        passengerName: passengerForm.name || undefined,
+        idNumber: passengerForm.idNumber || undefined,
+        email: passengerForm.email || undefined,
+        phone: passengerForm.phone || undefined,
       });
       setClientSecret(cs);
     } catch (e: any) {
@@ -217,7 +227,7 @@ function FaresPage() {
                     <div className="text-xs text-muted-foreground">{cls} · {TICKET_TYPES.find((t) => t.id === ticket)?.label}</div>
                   </div>
                   <button
-                    onClick={handleGenerateTicket}
+                    onClick={() => { setPassengerForm({ name: "", idNumber: "", email: "", phone: "" }); setShowPassenger(true); }}
                     disabled={initiating}
                     className="inline-flex items-center gap-2 rounded-sm bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-60"
                   >
@@ -241,6 +251,49 @@ function FaresPage() {
               from={from} to={to} cls={cls} ticket={ticket} total={total}
               train={matchedTrain} ticketRef={paidTicket.ticket_ref} bookedAt={paidTicket.booked_at}
             />
+          )}
+
+          {/* Passenger details modal */}
+          {showPassenger && (
+            <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16">
+              <div className="w-full max-w-md rounded-md border border-border bg-card p-6 shadow-elevated">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-foreground">Passenger Details</h3>
+                  <button onClick={() => setShowPassenger(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="mb-4 space-y-1 rounded-sm bg-secondary/40 p-3 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Route</span><span className="font-semibold">{from} → {to}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Type</span><span className="font-semibold">{TICKET_TYPES.find((t) => t.id === ticket)?.label} · {cls}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-semibold">R {total.toFixed(2)}</span></div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Full name <span className="text-destructive">*</span></label>
+                    <input required value={passengerForm.name} onChange={(e) => setPassengerForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Thabo Nkosi" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">ID / Passport number</label>
+                    <input value={passengerForm.idNumber} onChange={(e) => setPassengerForm((f) => ({ ...f, idNumber: e.target.value }))} placeholder="SA ID or passport number" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Email address</label>
+                    <input type="email" value={passengerForm.email} onChange={(e) => setPassengerForm((f) => ({ ...f, email: e.target.value }))} placeholder="you@example.com" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone number</label>
+                    <input type="tel" value={passengerForm.phone} onChange={(e) => setPassengerForm((f) => ({ ...f, phone: e.target.value }))} placeholder="0821234567" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Your details are used for ticket recovery only.</p>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => setShowPassenger(false)} className="flex-1 rounded-sm border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary">Cancel</button>
+                    <button disabled={!passengerForm.name.trim() || initiating} onClick={handleConfirmPassenger} className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                      {initiating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ticket className="h-4 w-4" />}
+                      {initiating ? "Processing…" : "Continue"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Stripe payment modal */}

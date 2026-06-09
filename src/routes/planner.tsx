@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { z } from "zod";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Header } from "@/components/Header";
@@ -9,6 +9,7 @@ import { planTrip, type TripPlan } from "@/data/extras";
 import { SCHEDULES } from "@/data/prasa";
 import { useSavedRoutes } from "@/hooks/useSavedRoutes";
 import { api } from "@/lib/api";
+import type { TimetableResult } from "@/lib/api";
 import { Route as RouteIcon, ArrowDown, Clock, RefreshCw, Ticket, Download, Star, ChevronDown, ChevronUp, Train, X, AlertTriangle, Loader2 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -150,8 +151,11 @@ function PlanCard({ plan, index }: { plan: TripPlan; index: number }) {
   const [paymentSecret, setPaymentSecret] = useState<string | null>(null);
   const [initiating, setInitiating] = useState(false);
   const [error, setError] = useState("");
+  const [passengerForm, setPassengerForm] = useState({ name: "", idNumber: "", email: "", phone: "" });
+  const [showPassenger, setShowPassenger] = useState(false);
 
   async function openPayment() {
+    setShowPassenger(false);
     setInitiating(true);
     setError("");
     try {
@@ -166,6 +170,10 @@ function PlanCard({ plan, index }: { plan: TripPlan; index: number }) {
         arrival: plan.arrival,
         fare: plan.totalFare,
         travelClass: "Metro",
+        passengerName: passengerForm.name || undefined,
+        idNumber: passengerForm.idNumber || undefined,
+        email: passengerForm.email || undefined,
+        phone: passengerForm.phone || undefined,
       });
       setPaymentSecret(clientSecret);
     } catch (e: any) {
@@ -248,7 +256,7 @@ function PlanCard({ plan, index }: { plan: TripPlan; index: number }) {
         <div className="mt-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={openPayment}
+              onClick={() => { setPassengerForm({ name: "", idNumber: "", email: "", phone: "" }); setShowPassenger(true); }}
               disabled={initiating}
               className="flex items-center gap-2 rounded-sm bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-60"
             >
@@ -257,6 +265,48 @@ function PlanCard({ plan, index }: { plan: TripPlan; index: number }) {
             </button>
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
+
+          {/* Passenger details modal */}
+          {showPassenger && (
+            <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16">
+              <div className="w-full max-w-md rounded-md border border-border bg-card p-6 shadow-elevated">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-foreground">Passenger Details</h3>
+                  <button onClick={() => setShowPassenger(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="mb-4 space-y-1 rounded-sm bg-secondary/40 p-3 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Route</span><span className="font-semibold">{plan.legs[0].train.from} → {plan.legs[plan.legs.length - 1].train.to}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Fare</span><span className="font-semibold">R {plan.totalFare.toFixed(2)}</span></div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Full name <span className="text-destructive">*</span></label>
+                    <input required value={passengerForm.name} onChange={(e) => setPassengerForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Thabo Nkosi" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">ID / Passport number</label>
+                    <input value={passengerForm.idNumber} onChange={(e) => setPassengerForm((f) => ({ ...f, idNumber: e.target.value }))} placeholder="SA ID or passport number" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Email address</label>
+                    <input type="email" value={passengerForm.email} onChange={(e) => setPassengerForm((f) => ({ ...f, email: e.target.value }))} placeholder="you@example.com" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone number</label>
+                    <input type="tel" value={passengerForm.phone} onChange={(e) => setPassengerForm((f) => ({ ...f, phone: e.target.value }))} placeholder="0821234567" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Your details are used for ticket recovery only.</p>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => setShowPassenger(false)} className="flex-1 rounded-sm border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary">Cancel</button>
+                    <button disabled={!passengerForm.name.trim() || initiating} onClick={openPayment} className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                      {initiating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ticket className="h-4 w-4" />}
+                      {initiating ? "Processing…" : "Continue"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Payment modal */}
           {paymentSecret && (
@@ -408,6 +458,14 @@ function PlannerPage() {
   const navigate = Route.useNavigate();
   const { from, to, time } = Route.useSearch();
   const plans = useMemo(() => (from && to ? planTrip(from, to, time) : []), [from, to, time]);
+  const [ttResults, setTtResults] = useState<TimetableResult[]>([]);
+
+  useEffect(() => {
+    if (!from || !to) { setTtResults([]); return; }
+    api.timetableSearch(from, to, time || undefined)
+      .then(setTtResults)
+      .catch(() => setTtResults([]));
+  }, [from, to, time]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -453,6 +511,48 @@ function PlannerPage() {
               </ol>
             )}
 
+            {/* Official PRASA Timetable results */}
+            {ttResults.length > 0 && (
+              <div className="rounded-md border border-primary/30 bg-card">
+                <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+                  <Train className="h-4 w-4 text-primary" />
+                  <span className="font-semibold text-foreground">Official PRASA timetable &mdash; {from} &rarr; {to}</span>
+                  <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{ttResults.length} service{ttResults.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Train</th>
+                        <th className="px-4 py-2 text-left">Departs</th>
+                        <th className="px-4 py-2 text-left">Arrives</th>
+                        <th className="px-4 py-2 text-left">Duration</th>
+                        <th className="px-4 py-2 text-left">Book</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ttResults.map((r) => {
+                        const depM = r.departure.split(":").reduce((a, b, i) => a + Number(b) * (i === 0 ? 60 : 1), 0);
+                        const arrM = r.arrival.split(":").reduce((a, b, i) => a + Number(b) * (i === 0 ? 60 : 1), 0);
+                        const dur = arrM >= depM ? arrM - depM : arrM + 1440 - depM;
+                        return (
+                          <tr key={`${r.train_no}-${r.departure}`} className="border-t border-border hover:bg-secondary/30">
+                            <td className="px-4 py-2 font-mono font-semibold text-primary">#{r.train_no}</td>
+                            <td className="px-4 py-2 font-semibold">{r.departure}</td>
+                            <td className="px-4 py-2">{r.arrival}</td>
+                            <td className="px-4 py-2 text-muted-foreground">{dur} min</td>
+                            <td className="px-4 py-2">
+                              <OfficialTicketButton trainNo={r.train_no} from={r.from_station} to={r.to_station} departure={r.departure} arrival={r.arrival} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Always show full timetable even if no match at chosen time */}
             <RouteTimetable from={from} to={to} />
           </>
@@ -462,5 +562,102 @@ function PlannerPage() {
       <Footer />
       <Chatbot />
     </div>
+  );
+}
+
+// ── Official timetable ticket button ─────────────────────────────────────────
+function OfficialTicketButton({ trainNo, from, to, departure, arrival }: {
+  trainNo: string; from: string; to: string; departure: string; arrival: string;
+}) {
+  const [showPassenger, setShowPassenger] = useState(false);
+  const [passengerForm, setPassengerForm] = useState({ name: "", idNumber: "", email: "", phone: "" });
+  const [loading, setLoading] = useState(false);
+  const [ticket, setTicket] = useState<{ ticket_ref: string } | null>(null);
+  const [error, setError] = useState("");
+
+  async function handleBook() {
+    setShowPassenger(false);
+    setLoading(true);
+    setError("");
+    try {
+      const t = await api.generateTicket({
+        trainNo,
+        line: "Stellenbosch Line",
+        from,
+        to,
+        departure,
+        arrival,
+        fare: 13.0,
+        travelClass: "Metro",
+        passengerName: passengerForm.name || undefined,
+        idNumber: passengerForm.idNumber || undefined,
+        email: passengerForm.email || undefined,
+        phone: passengerForm.phone || undefined,
+      });
+      setTicket({ ticket_ref: t.ticket_ref });
+    } catch (e: any) {
+      setError(e.message ?? "Could not generate ticket.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (ticket) {
+    return (
+      <span className="font-mono text-xs font-bold text-success">{ticket.ticket_ref}</span>
+    );
+  }
+
+  return (
+    <>
+      <button
+        disabled={loading}
+        onClick={() => { setPassengerForm({ name: "", idNumber: "", email: "", phone: "" }); setShowPassenger(true); }}
+        className="flex items-center gap-1 rounded-sm bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+      >
+        <Ticket className="h-3 w-3" /> {loading ? "Booking\u2026" : "Book"}
+      </button>
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      {showPassenger && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-16">
+          <div className="w-full max-w-md rounded-md border border-border bg-card p-6 shadow-elevated">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-foreground">Passenger Details</h3>
+              <button onClick={() => setShowPassenger(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="mb-4 rounded-sm bg-secondary/40 p-3 text-sm space-y-1">
+              <div className="flex justify-between"><span className="text-muted-foreground">Train</span><span className="font-semibold">#{trainNo} &middot; Stellenbosch Line</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Route</span><span className="font-semibold">{from} &rarr; {to}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Departs</span><span className="font-semibold">{departure}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Fare</span><span className="font-semibold">R13.00</span></div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Full name <span className="text-destructive">*</span></label>
+                <input required value={passengerForm.name} onChange={(e) => setPassengerForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Thabo Nkosi" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">ID / Passport number</label>
+                <input value={passengerForm.idNumber} onChange={(e) => setPassengerForm((f) => ({ ...f, idNumber: e.target.value }))} placeholder="SA ID or passport" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Email address</label>
+                <input type="email" value={passengerForm.email} onChange={(e) => setPassengerForm((f) => ({ ...f, email: e.target.value }))} placeholder="you@example.com" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone number</label>
+                <input type="tel" value={passengerForm.phone} onChange={(e) => setPassengerForm((f) => ({ ...f, phone: e.target.value }))} placeholder="0821234567" className="w-full rounded-sm border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowPassenger(false)} className="flex-1 rounded-sm border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary">Cancel</button>
+                <button disabled={!passengerForm.name.trim() || loading} onClick={handleBook} className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                  <Ticket className="h-4 w-4" /> Confirm &amp; Book
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

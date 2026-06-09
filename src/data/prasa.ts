@@ -25,6 +25,21 @@ export const STATION_COORDS: Record<string, { lat: number; lng: number }> = {
   "Langa":           { lat: -33.9491, lng: 18.5259 },
   "Pinelands":       { lat: -33.9372, lng: 18.5074 },
   "Stellenbosch":    { lat: -33.9355, lng: 18.8605 },
+  "Koeberg Road":    { lat: -33.9213, lng: 18.5102 },
+  "Maitland":        { lat: -33.9175, lng: 18.5156 },
+  "Woltemade":       { lat: -33.9140, lng: 18.5219 },
+  "Mutual":          { lat: -33.9099, lng: 18.5302 },
+  "Thornton":        { lat: -33.9071, lng: 18.5398 },
+  "Vasco":           { lat: -33.9040, lng: 18.5721 },
+  "Elsies River":    { lat: -33.9013, lng: 18.5842 },
+  "Tygerberg":       { lat: -33.8980, lng: 18.6132 },
+  "Kuils River":     { lat: -33.9318, lng: 18.6811 },
+  "Blackheath":      { lat: -33.9476, lng: 18.7086 },
+  "Meltonrose":      { lat: -33.9591, lng: 18.7301 },
+  "Eerste River":    { lat: -33.9720, lng: 18.7538 },
+  "Lynedoch":        { lat: -33.9901, lng: 18.7931 },
+  "Vlottenburg":     { lat: -34.0012, lng: 18.8178 },
+  "Du Toit":         { lat: -33.9211, lng: 18.8812 },
 };
 
 export interface TrainSchedule {
@@ -76,6 +91,21 @@ export const STATIONS: Station[] = [
   "Langa",
   "Pinelands",
   "Stellenbosch",
+  "Koeberg Road",
+  "Maitland",
+  "Woltemade",
+  "Mutual",
+  "Thornton",
+  "Vasco",
+  "Elsies River",
+  "Tygerberg",
+  "Kuils River",
+  "Blackheath",
+  "Meltonrose",
+  "Eerste River",
+  "Lynedoch",
+  "Vlottenburg",
+  "Du Toit",
 ];
 
 // ── Full stops per line (both directions) ─────────────────────────────────────

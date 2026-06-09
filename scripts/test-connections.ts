@@ -161,7 +161,33 @@ async function testHuggingFace() {
   }
 }
 
-// ── 6. Local API server ───────────────────────────────────────────────────────
+// ── 6. SMSPortal ───────────────────────────────────────────────────────────────────────────────
+async function testSMSPortal() {
+  const clientId     = process.env.SMSPORTAL_CLIENT_ID;
+  const clientSecret = process.env.SMSPORTAL_CLIENT_SECRET;
+  if (!clientId || clientId.includes("your-") || !clientSecret || clientSecret.includes("your-")) {
+    console.log(`${WARN} SMSPortal    — not set (SMS notifications disabled)`);
+    return false;
+  }
+  try {
+    const res = await axios.get("https://rest.smsportal.com/v1/Authentication", {
+      auth: { username: clientId, password: clientSecret },
+      timeout: 8000,
+      validateStatus: () => true,
+    });
+    if (res.status === 200 && res.data?.token) {
+      console.log(`${OK} SMSPortal    — authenticated`);
+      return true;
+    }
+    console.log(`${FAIL} SMSPortal    — status ${res.status}: invalid credentials`);
+    return false;
+  } catch (e: any) {
+    console.log(`${FAIL} SMSPortal    — ${e.message}`);
+    return false;
+  }
+}
+
+// ── 7. Local API server ───────────────────────────────────────────────────────────────────────────────
 async function testAPIServer() {
   try {
     const res = await axios.get("http://localhost:3001/api/health", { timeout: 3000 });
@@ -176,12 +202,13 @@ async function testAPIServer() {
 }
 
 // ── Run all ───────────────────────────────────────────────────────────────────
-const [sb, serp, ejs, oai, hf, api] = await Promise.all([
+const [sb, serp, ejs, oai, hf, sms, api] = await Promise.all([
   testSupabase(),
   testSerpAPI(),
   testEmailJS(),
   testOpenAI(),
   testHuggingFace(),
+  testSMSPortal(),
   testAPIServer(),
 ]);
 
@@ -191,6 +218,7 @@ console.log(` SerpAPI     ${serp ? OK + " OK"              : FAIL + " FAIL"}`);
 console.log(` EmailJS     ${ejs  ? OK + " OK"              : FAIL + " FAIL"}`);
 console.log(` OpenAI      ${oai  ? OK + " OK"              : WARN + " not set (optional)"}`);
 console.log(` HuggingFace ${hf   ? OK + " OK"              : WARN + " not set (optional)"}`);
+console.log(` SMSPortal   ${sms  ? OK + " OK"              : WARN + " not set (optional)"}`);
 console.log(` API Server  ${api  ? OK + " running"         : FAIL + " not running"}`);
 
 if (!sb) {

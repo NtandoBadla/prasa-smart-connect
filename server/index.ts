@@ -6,6 +6,7 @@ import cron from "node-cron";
 import { supabase } from "./db";
 import { runScrape } from "./scraper";
 import { sendEmail } from "./mailer";
+import { requireAuth } from "./middleware/auth";
 
 const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
@@ -22,6 +23,7 @@ import sentimentRouter from "./routes/sentiment";
 import lostFoundRouter from "./routes/lostFound";
 import safetyRouter from "./routes/safety";
 import stationSearchRouter from "./routes/stationSearch";
+import timetableRouter from "./routes/timetable";
 
 import { SCHEDULES as SEED_SCHEDULES, ALERTS as SEED_ALERTS } from "../src/data/prasa";
 import type { TrainSchedule, ServiceAlert } from "../src/data/prasa";
@@ -63,15 +65,6 @@ function verifyToken(token: string): boolean {
   }
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const token = req.headers["x-admin-token"] as string | undefined;
-  if (!token || !verifyToken(token)) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  next();
-}
-
 app.post("/api/admin/login", (req, res) => {
   const { username, password } = req.body as { username: string; password: string };
   if (!username || !password) { res.status(400).json({ error: "Username and password required" }); return; }
@@ -93,10 +86,99 @@ app.use("/api/subscribe",    subscribeRouter);
 app.use("/api/admin/update", requireAuth, adminUpdateRouter);
 app.use("/api/chatbot",      chatbotRouter);
 app.use("/api/tickets",      ticketsRouter);
+
+// ── Admin ticket recovery (auth-protected) ───────────────────────────────────────────────
+app.get("/api/admin/tickets",               requireAuth, async (req, res) => {
+  const { q, status, line } = req.query as { q?: string; status?: string; line?: string };
+  let query = supabase.from("tickets")
+    .select("id, ticket_ref, qr_token, user_id, passenger_name, id_number, phone, email, train_no, line, from_station, to_station, departure, arrival, fare, travel_class, payment_intent_id, payment_status, used, used_at, booked_at")
+    .order("booked_at", { ascending: false }).limit(200);
+  if (status) query = query.eq("payment_status", status);
+  if (line)   query = query.eq("line", line);
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  let results = data ?? [];
+  if (q) {
+    const lower = q.toLowerCase();
+    results = results.filter((t: any) =>
+      [t.ticket_ref, t.passenger_name, t.id_number, t.email, t.phone,
+       t.payment_intent_id, t.train_no].some((v) => v && String(v).toLowerCase().includes(lower))
+    );
+  }
+  res.json(results);
+});
+
+app.post("/api/admin/tickets/reissue",       requireAuth, async (req, res) => {
+  const { ticketId, channels } = req.body as { ticketId: string; channels: ("email" | "sms")[] };
+  if (!ticketId || !channels?.length) { res.status(400).json({ error: "ticketId and channels required" }); return; }
+  const TICKET_SELECT = "id, ticket_ref, qr_token, user_id, passenger_name, id_number, phone, email, train_no, line, from_station, to_station, departure, arrival, fare, travel_class, payment_intent_id, payment_status, used, used_at, booked_at";
+  const { data: ticket, error: fetchErr } = await supabase.from("tickets").select(TICKET_SELECT).eq("id", ticketId).single();
+  if (fetchErr || !ticket) { res.status(404).json({ error: "Ticket not found" }); return; }
+
+  const results: { channel: string; status: string; error?: string }[] = [];
+
+  if (channels.includes("email") && ticket.email) {
+    try {
+      await sendEmail({
+        to: ticket.email,
+        subject: `Your PRASA Ticket - ${ticket.ticket_ref}`,
+        html: "",
+        templateId: process.env.EMAILJS_TEMPLATE_ID,
+        templateParams: {
+          to_email: ticket.email,
+          ticket_ref: ticket.ticket_ref,
+          passenger_name: ticket.passenger_name ?? "Passenger",
+          train_no: ticket.train_no,
+          line: ticket.line,
+          from_station: ticket.from_station,
+          to_station: ticket.to_station,
+          departure: ticket.departure,
+          arrival: ticket.arrival ?? "-",
+          fare: `R${Number(ticket.fare).toFixed(2)}`,
+          travel_class: ticket.travel_class,
+          payment_status: ticket.payment_status.toUpperCase(),
+          booked_at: new Date(ticket.booked_at).toLocaleString("en-ZA"),
+        },
+      });
+      results.push({ channel: "email", status: "sent" });
+    } catch (err: any) { results.push({ channel: "email", status: "failed", error: err.message }); }
+  } else if (channels.includes("email")) {
+    results.push({ channel: "email", status: "skipped", error: "No email on record" });
+  }
+
+  if (channels.includes("sms") && ticket.phone) {
+    try {
+      const { sendSms } = await import("./mailer");
+      const msg = `PRASA Ticket ${ticket.ticket_ref}\n${ticket.from_station} -> ${ticket.to_station} | Train ${ticket.train_no}\nDeparts: ${ticket.departure} | ${ticket.travel_class}\nFare: R${Number(ticket.fare).toFixed(2)} | ${ticket.payment_status.toUpperCase()}\nPresent this ref at boarding.`;
+      await sendSms(ticket.phone, msg);
+      results.push({ channel: "sms", status: "sent" });
+    } catch (err: any) { results.push({ channel: "sms", status: "failed", error: err.message }); }
+  } else if (channels.includes("sms")) {
+    results.push({ channel: "sms", status: "skipped", error: "No phone on record" });
+  }
+
+  try {
+    await supabase.from("ticket_recovery_log").insert({
+      ticket_id: ticket.id,
+      ticket_ref: ticket.ticket_ref,
+      action: channels.map((c) => `reissue_${c}`).join("+"),
+      note: results.map((r) => `${r.channel}:${r.status}`).join(" | "),
+    });
+  } catch { /* audit log failure is non-fatal */ }
+
+  res.json({ ticket_ref: ticket.ticket_ref, results });
+});
+
+app.get("/api/admin/tickets/recovery-log",   requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("ticket_recovery_log").select("*").order("created_at", { ascending: false }).limit(100);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
 app.use("/api/sentiment",    sentimentRouter);
 app.use("/api/lost-found",   lostFoundRouter);
 app.use("/api/safety",       safetyRouter);
 app.use("/api/stations",     stationSearchRouter);
+app.use("/api/timetable",    timetableRouter);
 
 app.get("/api/live-trains", async (_req, res) => {
   const { trains } = await runScrape().catch(() => ({ trains: [] }));
