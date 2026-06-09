@@ -7,14 +7,13 @@
   NODE_VERSION = "20"
   NODE_OPTIONS = "--max-old-space-size=4096"
 
-# Route all /api/* requests to the Netlify Function
+# API requests → Netlify Function (must be before the SPA fallback)
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
-  force = true
 
-# SPA fallback — all other routes serve index.html
+# SPA fallback — serves index.html for all frontend routes
 [[redirects]]
   from = "/*"
   to = "/index.html"
