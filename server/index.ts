@@ -220,7 +220,7 @@ app.get("/api/coach-feedback", requireAuth, async (_req, res) => {
 const LINE_STOPS: Record<string, string[]> = {
   "Southern Line":   ["Cape Town","Woodstock","Salt River","Observatory","Mowbray","Rondebosch","Newlands","Claremont","Wynberg","Retreat","Muizenberg","Fish Hoek","Simon's Town"],
   "Northern Line":   ["Cape Town","Woodstock","Salt River","Pinelands","Goodwood","Parow","Bellville","Stellenbosch"],
-  "Central Line":    ["Cape Town","Woodstock","Salt River","Langa","Nyanga","Philippi","Mitchells Plain","Khayelitsha"],
+  "Central Line":    ["Chris Hani","Khayelitsha","Nonkqubela","Nolungile","Mandalay","Stock Road","Philippi","Nyanga","Bonteheuwel","Langa","Mutual","Ysterplaat","Paarden Eiland","Esplanade","Cape Town"],
   "Cape Flats Line": ["Cape Town","Salt River","Pinelands","Nyanga","Philippi","Retreat"],
 };
 

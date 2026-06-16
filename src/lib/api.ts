@@ -255,6 +255,26 @@ export const api = {
       booked_at: string;
     }[]>(`/tickets/${encodeURIComponent(userId)}`),
 
+  lookupTicketByRef: (ticketRef: string) =>
+    apiFetch<{
+      id: string;
+      ticket_ref: string;
+      qr_token: string;
+      passenger_name: string | null;
+      train_no: string;
+      line: string;
+      from_station: string;
+      to_station: string;
+      departure: string;
+      arrival: string | null;
+      fare: number;
+      travel_class: string;
+      payment_status: string;
+      used: boolean;
+      used_at: string | null;
+      booked_at: string;
+    }>(`/tickets/ref/${encodeURIComponent(ticketRef.trim().toUpperCase())}`),
+
   timetable: () =>
     apiFetch<Record<string, unknown>[]>("/tickets/timetable"),
 
@@ -484,4 +504,19 @@ export const api = {
 
   adminDeleteTrain: (trainNo: string) =>
     apiFetch<{ ok: boolean }>(`/timetable/admin/train/${encodeURIComponent(trainNo)}`, { method: "DELETE" }),
+
+  adminCreateRoute: (data: {
+    id: string; line_name: string; direction: string;
+    from_station: string; to_station: string; days_of_operation: string;
+  }) => apiFetch<PrasaRoute>(`/timetable/admin/route`, { method: "POST", body: JSON.stringify(data) }),
+
+  adminDeleteRoute: (routeId: string) =>
+    apiFetch<{ ok: boolean }>(`/timetable/admin/route/${encodeURIComponent(routeId)}`, { method: "DELETE" }),
+
+  adminBulkStops: (routeId: string, stops: {
+    train_no: string; station_name: string; stop_order: number;
+    departure: string | null; platform?: string | null;
+  }[]) => apiFetch<{ inserted: number }>(`/timetable/admin/bulk-stops`, {
+    method: "POST", body: JSON.stringify({ route_id: routeId, stops }),
+  }),
 };

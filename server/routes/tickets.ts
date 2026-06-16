@@ -299,6 +299,42 @@ router.post("/timetable", async (req, res) => {
   }
 });
 
+// ── GET /api/tickets/ref/:ticketRef ──────────────────────────────────────────
+// Public endpoint — passenger looks up their own ticket by reference code.
+// Returns the ticket WITHOUT the qr_token (qr_token is only embedded in the QR
+// image generated client-side from the stored value).
+router.get("/ref/:ticketRef", async (req, res) => {
+  const { ticketRef } = req.params;
+  const { data, error } = await supabase
+    .from("tickets")
+    .select(TICKET_SELECT)
+    .eq("ticket_ref", ticketRef.trim().toUpperCase())
+    .single();
+
+  if (error || !data) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+
+  res.json(data);
+});
+
+// ── GET /api/tickets/ref/:ticketRef ──────────────────────────────────────────
+// Public lookup by ticket reference — for passengers to view their ticket
+router.get("/ref/:ticketRef", async (req, res) => {
+  const { ticketRef } = req.params;
+  const { data, error } = await supabase
+    .from("tickets")
+    .select(TICKET_SELECT)
+    .ilike("ticket_ref", ticketRef.trim())
+    .single();
+  if (error || !data) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+  res.json(data);
+});
+
 // ── GET /api/tickets/:userId ──────────────────────────────────────────────────
 router.get("/:userId", async (req, res) => {
   const { userId } = req.params;

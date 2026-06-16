@@ -15,13 +15,19 @@ router.get("/search", async (req, res) => {
   if (!from || !to) { res.status(400).json({ error: "from and to required" }); return; }
 
   const [{ data: fromStops }, { data: toStops }] = await Promise.all([
-    supabase.from("prasa_timetable").select("route_id, train_no, stop_order, departure").ilike("station_name", from).not("departure", "is", null),
-    supabase.from("prasa_timetable").select("route_id, train_no, stop_order, departure").ilike("station_name", to).not("departure", "is", null),
+    supabase.from("prasa_timetable").select("route_id, train_no, stop_order, departure, platform").ilike("station_name", from).not("departure", "is", null),
+    supabase.from("prasa_timetable").select("route_id, train_no, stop_order, departure, platform").ilike("station_name", to).not("departure", "is", null),
   ]);
 
   if (!fromStops?.length || !toStops?.length) { res.json([]); return; }
 
-  const results: { train_no: string; route_id: string; from_station: string; to_station: string; departure: string; arrival: string; duration_min: number }[] = [];
+  const results: {
+    train_no: string; route_id: string;
+    from_station: string; to_station: string;
+    departure: string; arrival: string;
+    duration_min: number;
+    platform: string | null;
+  }[] = [];
 
   for (const f of fromStops) {
     const match = toStops.find(
@@ -33,6 +39,7 @@ router.get("/search", async (req, res) => {
       from_station: from, to_station: to,
       departure: f.departure, arrival: match.departure,
       duration_min: toMins(match.departure) - toMins(f.departure),
+      platform: f.platform ?? null,
     });
   }
 
@@ -57,7 +64,7 @@ router.get("/train/by-route/:routeId", async (req, res) => {
 router.get("/train/:trainNo", async (req, res) => {
   const { data, error } = await supabase
     .from("prasa_timetable")
-    .select("station_name, stop_order, departure, route_id")
+    .select("station_name, stop_order, departure, platform, route_id")
     .eq("train_no", req.params.trainNo)
     .order("stop_order", { ascending: true });
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -82,9 +89,9 @@ router.get("/stations/:routeId", async (req, res) => {
   res.json(data ?? []);
 });
 
-// ── GET /api/timetable/next?station=X&direction=down|up ──────────────────────
+// ── GET /api/timetable/next?station=X&direction=down|up&line=central|stellenbosch ──────────────────────────
 router.get("/next", async (req, res) => {
-  const { station, direction, limit = "5" } = req.query as { station?: string; direction?: string; limit?: string };
+  const { station, direction, line, limit = "5" } = req.query as { station?: string; direction?: string; line?: string; limit?: string };
   if (!station) { res.status(400).json({ error: "station required" }); return; }
 
   let query = supabase
@@ -95,7 +102,12 @@ router.get("/next", async (req, res) => {
     .order("departure", { ascending: true })
     .limit(Number(limit));
 
-  if (direction) query = query.ilike("route_id", `stellenbosch-${direction}`);
+  if (direction && line) {
+    query = query.ilike("route_id", `${line}-%-${direction}`);
+  } else if (direction) {
+    // Support both stellenbosch and central line directions
+    query = query.like("route_id", `%-${direction}%`);
+  }
 
   const { data, error } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -115,6 +127,47 @@ router.post("/admin/stop", requireAuth, async (req, res) => {
     .select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(data);
+});
+
+// ── Admin: POST /api/timetable/admin/route — create a new route ──────────────
+router.post("/admin/route", requireAuth, async (req, res) => {
+  const { id, line_name, direction, from_station, to_station, days_of_operation } = req.body;
+  if (!id || !line_name || !from_station || !to_station) {
+    res.status(400).json({ error: "id, line_name, from_station, to_station required" }); return;
+  }
+  const { data, error } = await supabase
+    .from("prasa_routes")
+    .upsert({ id, line_name, direction: direction || "down", from_station, to_station, days_of_operation: days_of_operation || "Mon-Fri" },
+             { onConflict: "id" })
+    .select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data);
+});
+
+// ── Admin: DELETE /api/timetable/admin/route/:routeId ───────────────────────
+router.delete("/admin/route/:routeId", requireAuth, async (req, res) => {
+  const { routeId } = req.params;
+  // Delete timetable stops first, then stations, then route
+  await supabase.from("prasa_timetable").delete().eq("route_id", routeId);
+  await supabase.from("prasa_stations").delete().eq("route_id", routeId);
+  const { error } = await supabase.from("prasa_routes").delete().eq("id", routeId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
+});
+
+// ── Admin: POST /api/timetable/admin/bulk-stops — insert many stops at once ──
+router.post("/admin/bulk-stops", requireAuth, async (req, res) => {
+  const { route_id, stops } = req.body as {
+    route_id: string;
+    stops: { train_no: string; station_name: string; stop_order: number; departure: string | null; platform?: string | null }[];
+  };
+  if (!route_id || !Array.isArray(stops) || stops.length === 0) {
+    res.status(400).json({ error: "route_id and stops[] required" }); return;
+  }
+  const rows = stops.map((s) => ({ ...s, route_id, departure: s.departure || null, platform: s.platform || null }));
+  const { error } = await supabase.from("prasa_timetable").upsert(rows, { onConflict: "route_id,train_no,station_name" });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ inserted: rows.length });
 });
 
 // ── Admin: DELETE /api/timetable/admin/train/:trainNo ────────────────────────

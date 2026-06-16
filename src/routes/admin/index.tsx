@@ -947,7 +947,30 @@ function SafetyTab({ incidents, onRefresh }: { incidents: SafetyIncident[]; onRe
 // ── Timetable Tab ─────────────────────────────────────────────────────────────
 const BLANK_STOP = { route_id: "", train_no: "", station_name: "", stop_order: 1, departure: "", platform: "" };
 
-function TimetableTab({ onRefresh: _onRefresh }: { entries: Record<string, unknown>[]; onRefresh: () => void }) {
+const BLANK_ROUTE = {
+  id: "", line_name: "Central Line", direction: "down" as "down" | "up",
+  from_station: "", to_station: "", days_of_operation: "Mon-Fri",
+};
+
+// Parse bulk timetable paste: each line = "Station Name HH:mm HH:mm ..." ("-" = skip)
+function parseBulkStops(
+  routeId: string, stationLines: string, trainNos: string, platform: string,
+): { train_no: string; station_name: string; stop_order: number; departure: string | null; platform: string | null }[] {
+  const trains = trainNos.split(",").map((t) => t.trim()).filter(Boolean);
+  const rows: { train_no: string; station_name: string; stop_order: number; departure: string | null; platform: string | null }[] = [];
+  stationLines.split("\n").forEach((line, si) => {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 2) return;
+    const ti = parts.findIndex((p) => /^\d{1,2}:\d{2}$/.test(p) || p === "-");
+    if (ti === -1) return;
+    const stationName = parts.slice(0, ti).join(" ");
+    parts.slice(ti).forEach((t, trainIdx) => {
+      if (trainIdx >= trains.length) return;
+      rows.push({ train_no: trains[trainIdx], station_name: stationName, stop_order: si + 1, departure: t === "-" ? null : t, platform: platform || null });
+    });
+  });
+  return rows;
+}function TimetableTab({ onRefresh: _onRefresh }: { entries: Record<string, unknown>[]; onRefresh: () => void }) {
   const [routes, setRoutes] = useState<PrasaRoute[]>([]);
   const [selectedRoute, setSelectedRoute] = useState("");
   const [stops, setStops] = useState<TimetableStop[]>([]);
@@ -973,6 +996,65 @@ function TimetableTab({ onRefresh: _onRefresh }: { entries: Record<string, unkno
       .catch(() => setStops([]))
       .finally(() => setLoadingStops(false));
   }, [selectedRoute]);
+
+  // ── New route state ───────────────────────────────────────────────────────
+  const [showNewRoute, setShowNewRoute] = useState(false);
+  const [newRoute, setNewRoute] = useState({ ...BLANK_ROUTE });
+  const [bulkStationLines, setBulkStationLines] = useState("");
+  const [bulkTrainNos, setBulkTrainNos] = useState("");
+  const [bulkPlatform, setBulkPlatform] = useState("");
+  const [creatingRoute, setCreatingRoute] = useState(false);
+  const [deletingRoute, setDeletingRoute] = useState(false);
+
+  async function reloadRoutes(selectId?: string) {
+    const r = await api.adminTimetableRoutes().catch(() => [] as PrasaRoute[]);
+    setRoutes(r);
+    if (selectId) setSelectedRoute(selectId);
+    else if (r.length > 0 && !selectedRoute) setSelectedRoute(r[0].id);
+  }
+
+  async function createRoute(e: React.FormEvent) {
+    e.preventDefault();
+    setCreatingRoute(true); setMsg(null);
+    try {
+      await api.adminCreateRoute(newRoute);
+      if (bulkStationLines.trim() && bulkTrainNos.trim()) {
+        const stopRows = parseBulkStops(newRoute.id, bulkStationLines, bulkTrainNos, bulkPlatform);
+        if (stopRows.length > 0) {
+          const res = await api.adminBulkStops(newRoute.id, stopRows);
+          setMsg({ type: "ok", text: `Route "${newRoute.id}" created with ${res.inserted} stop-times.` });
+        } else {
+          setMsg({ type: "ok", text: "Route created. No stops parsed — check format." });
+        }
+      } else {
+        setMsg({ type: "ok", text: `Route "${newRoute.id}" created. Add stops using the form.` });
+      }
+      const createdId = newRoute.id;
+      setShowNewRoute(false);
+      setNewRoute({ ...BLANK_ROUTE });
+      setBulkStationLines(""); setBulkTrainNos(""); setBulkPlatform("");
+      await reloadRoutes(createdId);
+    } catch (err) {
+      setMsg({ type: "err", text: (err as Error).message });
+    } finally {
+      setCreatingRoute(false);
+    }
+  }
+
+  async function deleteRoute() {
+    if (!selectedRoute || !confirm(`Delete route "${selectedRoute}" and ALL its timetable data? Cannot be undone.`)) return;
+    setDeletingRoute(true);
+    try {
+      await api.adminDeleteRoute(selectedRoute);
+      setMsg({ type: "ok", text: `Route "${selectedRoute}" deleted.` });
+      setSelectedRoute(""); setStops([]);
+      await reloadRoutes();
+    } catch (err) {
+      setMsg({ type: "err", text: (err as Error).message });
+    } finally {
+      setDeletingRoute(false);
+    }
+  }
 
   async function saveStop(e: React.FormEvent) {
     e.preventDefault();
@@ -1021,35 +1103,125 @@ function TimetableTab({ onRefresh: _onRefresh }: { entries: Record<string, unkno
 
   return (
     <div className="space-y-6">
-      {/* Route selector */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* ── Toolbar ── */}
+      <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-muted-foreground">Route</label>
-          <select
-            value={selectedRoute}
-            onChange={(e) => setSelectedRoute(e.target.value)}
-            className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-            disabled={loadingRoutes}
-          >
+          <select value={selectedRoute} onChange={(e) => setSelectedRoute(e.target.value)}
+            className="rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground" disabled={loadingRoutes}>
             {routes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.line_name} — {r.direction === "down" ? "↓" : "↑"} {r.from_station} → {r.to_station} ({r.days_of_operation})
-              </option>
+              <option key={r.id} value={r.id}>{r.line_name} — {r.direction === "down" ? "↓" : "↑"} {r.from_station} → {r.to_station} ({r.days_of_operation})</option>
             ))}
           </select>
         </div>
-        {currentRoute && (
-          <div className="self-end rounded-sm bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
-            {stops.length} stop-times · {trainNos.length} trains
-          </div>
-        )}
-        <button
-          onClick={() => setEditingStop({ ...BLANK_STOP, route_id: selectedRoute })}
-          className="self-end flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" /> Add / edit stop
+        {currentRoute && <div className="rounded-sm bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">{stops.length} stop-times · {trainNos.length} trains</div>}
+        <button onClick={() => { setEditingStop({ ...BLANK_STOP, route_id: selectedRoute }); setMsg(null); }}
+          className="flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+          <Plus className="h-4 w-4" /> Add stop
         </button>
+        <button onClick={() => { setShowNewRoute((v) => !v); setMsg(null); }}
+          className="flex items-center gap-1.5 rounded-sm border border-primary px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary/10">
+          <Plus className="h-4 w-4" /> New route
+        </button>
+        {selectedRoute && (
+          <button disabled={deletingRoute} onClick={deleteRoute}
+            className="flex items-center gap-1.5 rounded-sm border border-destructive/50 px-3 py-1.5 text-sm font-semibold text-destructive hover:bg-destructive/10 disabled:opacity-50">
+            <Trash2 className="h-4 w-4" /> {deletingRoute ? "Deleting…" : "Delete route"}
+          </button>
+        )}
       </div>
+
+      {/* New route form */}
+      {showNewRoute && (
+        <div className="rounded-md border border-primary/40 bg-card p-5">
+          <h3 className="mb-1 font-semibold text-foreground">Create a new route</h3>
+          <p className="mb-4 text-xs text-muted-foreground">A route groups a set of timetable stop-times. You can optionally paste bulk stop data below.</p>
+          <form onSubmit={createRoute} className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Route ID (unique slug)</label>
+                <input required value={newRoute.id} onChange={(e) => setNewRoute((r) => ({ ...r, id: e.target.value }))}
+                  placeholder="e.g. southern-down-1"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Line name</label>
+                <input required value={newRoute.line_name} onChange={(e) => setNewRoute((r) => ({ ...r, line_name: e.target.value }))}
+                  placeholder="e.g. Southern Line"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Direction</label>
+                <select value={newRoute.direction} onChange={(e) => setNewRoute((r) => ({ ...r, direction: e.target.value as "down" | "up" }))}
+                  className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground">
+                  <option value="down">Down ↓</option>
+                  <option value="up">Up ↑</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">From station</label>
+                <input required value={newRoute.from_station} onChange={(e) => setNewRoute((r) => ({ ...r, from_station: e.target.value }))}
+                  placeholder="e.g. Cape Town"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">To station</label>
+                <input required value={newRoute.to_station} onChange={(e) => setNewRoute((r) => ({ ...r, to_station: e.target.value }))}
+                  placeholder="e.g. Stellenbosch"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Days of operation</label>
+                <input value={newRoute.days_of_operation} onChange={(e) => setNewRoute((r) => ({ ...r, days_of_operation: e.target.value }))}
+                  placeholder="e.g. Mon-Fri"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            </div>
+
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="text-xs font-medium text-muted-foreground">Bulk stop-times (optional)</p>
+              <p className="text-xs text-muted-foreground">
+                Each line: <code className="rounded bg-secondary px-1">Station Name HH:mm HH:mm …</code> (use <code className="rounded bg-secondary px-1">-</code> to skip a train at that stop).
+                Train numbers: comma-separated, matching the time columns.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Station lines</label>
+                  <textarea rows={5} value={bulkStationLines} onChange={(e) => setBulkStationLines(e.target.value)}
+                    placeholder={"Cape Town 06:00 06:30\nSalt River 06:08 06:38\nWoodstock 06:12 -"}
+                    className="w-full rounded-sm border border-border bg-background px-3 py-1.5 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Train numbers (comma-separated)</label>
+                    <input value={bulkTrainNos} onChange={(e) => setBulkTrainNos(e.target.value)}
+                      placeholder="9001, 9003"
+                      className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Default platform (optional)</label>
+                    <input value={bulkPlatform} onChange={(e) => setBulkPlatform(e.target.value)}
+                      placeholder="1"
+                      className="w-full rounded-sm border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {msg && <p className={`rounded-sm p-2 text-sm ${msg.type === "ok" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{msg.text}</p>}
+            <div className="flex gap-2">
+              <button type="submit" disabled={creatingRoute}
+                className="flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60">
+                <Check className="h-3.5 w-3.5" /> {creatingRoute ? "Creating…" : "Create route"}
+              </button>
+              <button type="button" onClick={() => { setShowNewRoute(false); setNewRoute({ ...BLANK_ROUTE }); setBulkStationLines(""); setBulkTrainNos(""); setBulkPlatform(""); }}
+                className="flex items-center gap-1.5 rounded-sm border border-border px-3 py-1.5 text-sm hover:bg-secondary">
+                <X className="h-3.5 w-3.5" /> Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Add / edit stop form */}
       {editingStop && (
@@ -1209,6 +1381,24 @@ function TicketRecoveryTab({ tickets, onRefresh }: { tickets: AdminTicket[]; onR
   const paid    = tickets.filter((t) => t.payment_status === "paid").length;
   const pending = tickets.filter((t) => t.payment_status === "pending").length;
   const used    = tickets.filter((t) => t.used).length;
+  const totalRevenue = tickets
+    .filter((t) => t.payment_status === "paid")
+    .reduce((sum, t) => sum + Number(t.fare), 0);
+
+  // Revenue grouped by departure station (paid tickets only)
+  const revenueByStation = Object.entries(
+    tickets
+      .filter((t) => t.payment_status === "paid")
+      .reduce<Record<string, { revenue: number; count: number }>>((acc, t) => {
+        const key = t.from_station;
+        if (!acc[key]) acc[key] = { revenue: 0, count: 0 };
+        acc[key].revenue += Number(t.fare);
+        acc[key].count += 1;
+        return acc;
+      }, {}),
+  )
+    .map(([station, data]) => ({ station, ...data }))
+    .sort((a, b) => b.revenue - a.revenue);
 
   return (
     <div className="space-y-6">
@@ -1217,6 +1407,56 @@ function TicketRecoveryTab({ tickets, onRefresh }: { tickets: AdminTicket[]; onR
         <StatCard label="Paid"            value={paid}           color="bg-success" />
         <StatCard label="Pending Payment" value={pending}        color="bg-warning" />
         <StatCard label="Used / Scanned"  value={used}           color="bg-primary" />
+      </div>
+
+      {/* ── Revenue by station ── */}
+      <div className="rounded-md border border-border bg-card p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-foreground">Revenue by departure station</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Paid tickets only · {paid} ticket{paid !== 1 ? "s" : ""}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Total revenue</p>
+            <p className="text-xl font-bold text-success">R{totalRevenue.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          </div>
+        </div>
+        {revenueByStation.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">No paid tickets yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/50 text-xs uppercase text-muted-foreground">
+                <tr>
+                  <Th>Departure station</Th>
+                  <Th>Tickets sold</Th>
+                  <Th>Revenue (ZAR)</Th>
+                  <Th>% of total</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {revenueByStation.map(({ station, revenue, count }) => {
+                  const pct = totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0;
+                  return (
+                    <tr key={station} className="border-t border-border hover:bg-secondary/30">
+                      <Td><span className="font-medium">{station}</span></Td>
+                      <Td>{count}</Td>
+                      <Td><span className="font-semibold text-success">R{revenue.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></Td>
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                            <div className="h-full rounded-full bg-success" style={{ width: `${pct.toFixed(1)}%` }} />
+                          </div>
+                          <span className="w-10 text-right text-xs text-muted-foreground">{pct.toFixed(1)}%</span>
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="rounded-md border border-border bg-card p-5">

@@ -40,6 +40,16 @@ export const STATION_COORDS: Record<string, { lat: number; lng: number }> = {
   "Lynedoch":        { lat: -33.9901, lng: 18.7931 },
   "Vlottenburg":     { lat: -34.0012, lng: 18.8178 },
   "Du Toit":         { lat: -33.9211, lng: 18.8812 },
+  // ── Central Line — Khayelitsha Branch extra stations ─────────────────────
+  "Chris Hani":      { lat: -34.0512, lng: 18.6935 },
+  "Nonkqubela":      { lat: -34.0448, lng: 18.6851 },
+  "Nolungile":       { lat: -34.0380, lng: 18.6782 },
+  "Mandalay":        { lat: -34.0198, lng: 18.6578 },
+  "Stock Road":      { lat: -34.0089, lng: 18.6421 },
+  "Bonteheuwel":     { lat: -33.9712, lng: 18.5489 },
+  "Ysterplaat":      { lat: -33.9021, lng: 18.4912 },
+  "Paarden Eiland":  { lat: -33.9118, lng: 18.4731 },
+  "Esplanade":       { lat: -33.9195, lng: 18.4431 },
 };
 
 export interface TrainSchedule {
@@ -106,6 +116,16 @@ export const STATIONS: Station[] = [
   "Lynedoch",
   "Vlottenburg",
   "Du Toit",
+  // ── Central Line — Khayelitsha Branch extra stations ──────────────────────
+  "Chris Hani",
+  "Nonkqubela",
+  "Nolungile",
+  "Mandalay",
+  "Stock Road",
+  "Bonteheuwel",
+  "Ysterplaat",
+  "Paarden Eiland",
+  "Esplanade",
 ];
 
 // ── Full stops per line (both directions) ─────────────────────────────────────
@@ -115,6 +135,23 @@ const SOUTHERN_UP   = [...SOUTHERN_DOWN].reverse();
 const NORTHERN_DOWN = ["Cape Town", "Woodstock", "Salt River", "Pinelands", "Goodwood", "Parow", "Bellville", "Stellenbosch"];
 const NORTHERN_UP   = [...NORTHERN_DOWN].reverse();
 
+// Central Line — full route: Chris Hani → Cape Town (via Khayelitsha branch)
+const CENTRAL_FULL_DOWN = [
+  "Chris Hani", "Khayelitsha", "Nonkqubela", "Nolungile", "Mandalay",
+  "Stock Road", "Philippi", "Nyanga", "Bonteheuwel", "Langa",
+  "Mutual", "Ysterplaat", "Paarden Eiland", "Esplanade", "Cape Town",
+];
+const CENTRAL_FULL_UP = [...CENTRAL_FULL_DOWN].reverse();
+
+// Nonkqubela → Cape Town sub-route
+const CENTRAL_NONKQUBELA_DOWN = [
+  "Nonkqubela", "Nolungile", "Mandalay", "Stock Road", "Philippi",
+  "Nyanga", "Bonteheuwel", "Langa", "Mutual", "Ysterplaat",
+  "Paarden Eiland", "Esplanade", "Cape Town",
+];
+const CENTRAL_NONKQUBELA_UP = [...CENTRAL_NONKQUBELA_DOWN].reverse();
+
+// Legacy short Central Line used by existing SCHEDULES entries (kept for compatibility)
 const CENTRAL_DOWN  = ["Cape Town", "Woodstock", "Salt River", "Langa", "Nyanga", "Philippi", "Mitchells Plain", "Khayelitsha"];
 const CENTRAL_UP    = [...CENTRAL_DOWN].reverse();
 
@@ -247,6 +284,54 @@ export const SCHEDULES: TrainSchedule[] = [
   make("F10", "3151", "Cape Flats Line", CAPEFLATS_UP, "12:30", 58, "7"),
   make("F11", "3167", "Cape Flats Line", CAPEFLATS_UP, "17:30", 58, "7"),
   make("F12", "3183", "Cape Flats Line", CAPEFLATS_UP, "19:00", 58, "7"),
+
+  // ── Central Line — Chris Hani → Cape Town (Route 1) ──────────────────────
+  // Train numbers: 9900,9400,9902,9904,9906,9908,9910,9912,9914
+  // Approximate total journey ~70 min; platform 1 at Cape Town
+  make("CL1",  "9900", "Central Line", CENTRAL_FULL_DOWN, "05:06", 70, "1"),
+  make("CL2",  "9400", "Central Line", CENTRAL_FULL_DOWN, "06:23", 70, "1"),
+  make("CL3",  "9902", "Central Line", CENTRAL_FULL_DOWN, "07:41", 70, "1"),
+  make("CL4",  "9904", "Central Line", CENTRAL_FULL_DOWN, "08:53", 70, "1"),
+  make("CL5",  "9906", "Central Line", CENTRAL_FULL_DOWN, "10:33", 70, "1"),
+  make("CL6",  "9908", "Central Line", CENTRAL_FULL_DOWN, "11:56", 70, "1"),
+  make("CL7",  "9910", "Central Line", CENTRAL_FULL_DOWN, "13:17", 70, "1"),
+  make("CL8",  "9912", "Central Line", CENTRAL_FULL_DOWN, "15:13", 70, "1"),
+  make("CL9",  "9914", "Central Line", CENTRAL_FULL_DOWN, "16:36", 70, "1"),
+
+  // ── Central Line — Cape Town → Chris Hani (Route 1 return) ───────────────
+  make("CL10", "9901", "Central Line", CENTRAL_FULL_UP, "06:16", 70, "1"),
+  make("CL11", "9401", "Central Line", CENTRAL_FULL_UP, "07:38", 70, "1"),
+  make("CL12", "9903", "Central Line", CENTRAL_FULL_UP, "08:53", 70, "1"),
+  make("CL13", "9905", "Central Line", CENTRAL_FULL_UP, "10:03", 70, "1"),
+  make("CL14", "9907", "Central Line", CENTRAL_FULL_UP, "11:23", 70, "1"),
+  make("CL15", "9909", "Central Line", CENTRAL_FULL_UP, "12:47", 70, "1"),
+  make("CL16", "9911", "Central Line", CENTRAL_FULL_UP, "14:48", 70, "1"),
+  make("CL17", "9913", "Central Line", CENTRAL_FULL_UP, "16:03", 70, "1"),
+  make("CL18", "9915", "Central Line", CENTRAL_FULL_UP, "17:18", 70, "1"),
+
+  // ── Central Line — Nonkqubela → Chris Hani (Route 2, Mon–Fri) ────────────
+  make("CL20", "9901", "Central Line", CENTRAL_NONKQUBELA_UP, "05:53", 25, "1"),
+  make("CL21", "9903", "Central Line", CENTRAL_NONKQUBELA_UP, "07:08", 25, "1"),
+  make("CL22", "9905", "Central Line", CENTRAL_NONKQUBELA_UP, "08:23", 25, "1"),
+  make("CL23", "9907", "Central Line", CENTRAL_NONKQUBELA_UP, "10:03", 25, "1"),
+  make("CL24", "9909", "Central Line", CENTRAL_NONKQUBELA_UP, "11:23", 25, "1"),
+  make("CL25", "9911", "Central Line", CENTRAL_NONKQUBELA_UP, "12:47", 25, "1"),
+  make("CL26", "9913", "Central Line", CENTRAL_NONKQUBELA_UP, "14:48", 25, "1"),
+  make("CL27", "9915", "Central Line", CENTRAL_NONKQUBELA_UP, "16:03", 25, "1"),
+  make("CL28", "9917", "Central Line", CENTRAL_NONKQUBELA_UP, "17:18", 25, "1"),
+
+  // ── Central Line — Nonkqubela → Cape Town (Route 3) ──────────────────────
+  make("CL30", "9900", "Central Line", CENTRAL_NONKQUBELA_DOWN, "05:06", 60, "1"),
+  make("CL31", "9902", "Central Line", CENTRAL_NONKQUBELA_DOWN, "06:23", 60, "1"),
+  make("CL32", "9904", "Central Line", CENTRAL_NONKQUBELA_DOWN, "07:41", 60, "1"),
+  make("CL33", "9906", "Central Line", CENTRAL_NONKQUBELA_DOWN, "08:53", 60, "1"),
+  make("CL34", "9908", "Central Line", CENTRAL_NONKQUBELA_DOWN, "10:33", 60, "1"),
+  make("CL35", "9910", "Central Line", CENTRAL_NONKQUBELA_DOWN, "11:56", 60, "1"),
+  make("CL36", "9912", "Central Line", CENTRAL_NONKQUBELA_DOWN, "13:17", 60, "1"),
+  make("CL37", "9914", "Central Line", CENTRAL_NONKQUBELA_DOWN, "15:13", 60, "1"),
+  make("CL38", "9916", "Central Line", CENTRAL_NONKQUBELA_DOWN, "16:36", 60, "1"),
+  make("CL39", "9918", "Central Line", CENTRAL_NONKQUBELA_DOWN, "17:51", 60, "1"),
+  make("CL40", "9920", "Central Line", CENTRAL_NONKQUBELA_DOWN, "19:21", 60, "1"),
 ];
 
 export const ALERTS: ServiceAlert[] = [

@@ -566,6 +566,17 @@ function PlannerPage() {
 }
 
 // ── Official timetable ticket button ─────────────────────────────────────────
+// Derive line name and fare from train number prefix
+function detectLineFromTrainNo(trainNo: string): { line: string; fare: number } {
+  const n = parseInt(trainNo, 10);
+  if (n >= 9400 && n <= 9999) return { line: "Central Line",      fare: 12.5 };
+  if (n >= 3400 && n <= 3499) return { line: "Stellenbosch Line", fare: 13.0 };
+  if (n >= 1100 && n <= 1299) return { line: "Northern Line",     fare: 13.0 };
+  if (n >= 400  && n <= 599)  return { line: "Southern Line",     fare: 14.5 };
+  if (n >= 3100 && n <= 3199) return { line: "Cape Flats Line",   fare: 12.0 };
+  return { line: "PRASA Metrorail", fare: 12.5 };
+}
+
 function OfficialTicketButton({ trainNo, from, to, departure, arrival }: {
   trainNo: string; from: string; to: string; departure: string; arrival: string;
 }) {
@@ -575,6 +586,8 @@ function OfficialTicketButton({ trainNo, from, to, departure, arrival }: {
   const [ticket, setTicket] = useState<{ ticket_ref: string } | null>(null);
   const [error, setError] = useState("");
 
+  const { line, fare } = detectLineFromTrainNo(trainNo);
+
   async function handleBook() {
     setShowPassenger(false);
     setLoading(true);
@@ -582,12 +595,12 @@ function OfficialTicketButton({ trainNo, from, to, departure, arrival }: {
     try {
       const t = await api.generateTicket({
         trainNo,
-        line: "Stellenbosch Line",
+        line,
         from,
         to,
         departure,
         arrival,
-        fare: 13.0,
+        fare,
         travelClass: "Metro",
         passengerName: passengerForm.name || undefined,
         idNumber: passengerForm.idNumber || undefined,
@@ -626,10 +639,10 @@ function OfficialTicketButton({ trainNo, from, to, departure, arrival }: {
               <button onClick={() => setShowPassenger(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
             <div className="mb-4 rounded-sm bg-secondary/40 p-3 text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Train</span><span className="font-semibold">#{trainNo} &middot; Stellenbosch Line</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Train</span><span className="font-semibold">#{trainNo} &middot; {line}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Route</span><span className="font-semibold">{from} &rarr; {to}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Departs</span><span className="font-semibold">{departure}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Fare</span><span className="font-semibold">R13.00</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Fare</span><span className="font-semibold">R{fare.toFixed(2)}</span></div>
             </div>
             <div className="space-y-3">
               <div>

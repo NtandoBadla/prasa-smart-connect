@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ValidateRouteImport } from './routes/validate'
 import { Route as TrackingRouteImport } from './routes/tracking'
 import { Route as TouristRouteImport } from './routes/tourist'
 import { Route as TicketsRouteImport } from './routes/tickets'
@@ -29,6 +30,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 
+const ValidateRoute = ValidateRouteImport.update({
+  id: '/validate',
+  path: '/validate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TrackingRoute = TrackingRouteImport.update({
   id: '/tracking',
   path: '/tracking',
@@ -143,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/tickets': typeof TicketsRoute
   '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
+  '/validate': typeof ValidateRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
 }
@@ -163,6 +170,7 @@ export interface FileRoutesByTo {
   '/tickets': typeof TicketsRoute
   '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
+  '/validate': typeof ValidateRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin': typeof AdminIndexRoute
 }
@@ -185,6 +193,7 @@ export interface FileRoutesById {
   '/tickets': typeof TicketsRoute
   '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
+  '/validate': typeof ValidateRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/': typeof AdminIndexRoute
 }
@@ -208,6 +217,7 @@ export interface FileRouteTypes {
     | '/tickets'
     | '/tourist'
     | '/tracking'
+    | '/validate'
     | '/admin/login'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
@@ -228,6 +238,7 @@ export interface FileRouteTypes {
     | '/tickets'
     | '/tourist'
     | '/tracking'
+    | '/validate'
     | '/admin/login'
     | '/admin'
   id:
@@ -249,6 +260,7 @@ export interface FileRouteTypes {
     | '/tickets'
     | '/tourist'
     | '/tracking'
+    | '/validate'
     | '/admin/login'
     | '/admin/'
   fileRoutesById: FileRoutesById
@@ -271,10 +283,18 @@ export interface RootRouteChildren {
   TicketsRoute: typeof TicketsRoute
   TouristRoute: typeof TouristRoute
   TrackingRoute: typeof TrackingRoute
+  ValidateRoute: typeof ValidateRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/validate': {
+      id: '/validate'
+      path: '/validate'
+      fullPath: '/validate'
+      preLoaderRoute: typeof ValidateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tracking': {
       id: '/tracking'
       path: '/tracking'
@@ -441,6 +461,7 @@ const rootRouteChildren: RootRouteChildren = {
   TicketsRoute: TicketsRoute,
   TouristRoute: TouristRoute,
   TrackingRoute: TrackingRoute,
+  ValidateRoute: ValidateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

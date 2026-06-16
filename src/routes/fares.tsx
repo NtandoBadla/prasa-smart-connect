@@ -3,10 +3,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Chatbot } from "@/components/Chatbot";
-import { STATIONS, searchTrains } from "@/data/prasa";
+import { STATIONS, SCHEDULES, searchTrains } from "@/data/prasa";
 import { TICKET_TYPES, CLASS_MULTIPLIER, calcFare, type TicketTypeId, type TravelClass } from "@/data/extras";
 import { downloadTicketPDF } from "@/lib/ticketPDF";
 import { api } from "@/lib/api";
+import { QRCodeSVG } from "qrcode.react";
 import { Ticket, QrCode, Download, X, Loader2 } from "lucide-react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { stripePromise } from "@/lib/stripe";
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/fares")({
   component: FaresPage,
 });
 
-type PaidTicket = { ticket_ref: string; booked_at: string };
+type PaidTicket = { ticket_ref: string; qr_token?: string; booked_at: string };
 
 function StripePaymentForm({
   fare,
@@ -51,7 +52,7 @@ function StripePaymentForm({
       if (error) { setErr(error.message ?? "Payment failed"); return; }
       if (paymentIntent?.status === "succeeded") {
         const t = await api.confirmPayment(paymentIntent.id);
-        onSuccess({ ticket_ref: t.ticket_ref, booked_at: t.booked_at });
+        onSuccess({ ticket_ref: t.ticket_ref, qr_token: t.qr_token, booked_at: t.booked_at });
       }
     } catch (e: any) {
       setErr(e.message ?? "Payment error");
@@ -92,28 +93,51 @@ function FaresPage() {
   const [passengerForm, setPassengerForm] = useState({ name: "", idNumber: "", email: "", phone: "" });
   const [showPassenger, setShowPassenger] = useState(false);
 
-  const matchedTrain = useMemo(() => searchTrains(from, to)[0] ?? null, [from, to]);
+  // ── Fare resolution ──────────────────────────────────────────────────────────
+  // Find which line serves both stations (regardless of direction) to get fare.
+  // This works for ANY pair of stations on the network, not just Cape Town origins.
+  const matchedTrain = useMemo(() => {
+    // 1. Direct: a train that goes from→to in order
+    const direct = searchTrains(from, to)[0];
+    if (direct) return direct;
+    // 2. Reverse: a train that goes to→from (same line, same fare)
+    const reverse = searchTrains(to, from)[0];
+    if (reverse) return reverse;
+    // 3. Same-line: any train whose stops include both stations (any order)
+    const fl = from.trim().toLowerCase();
+    const tl = to.trim().toLowerCase();
+    return SCHEDULES.find((s) =>
+      s.stops.some((st) => st.toLowerCase() === fl) &&
+      s.stops.some((st) => st.toLowerCase() === tl)
+    ) ?? null;
+  }, [from, to]);
+
   const baseFare = matchedTrain?.fare ?? 0;
   const total = baseFare ? calcFare(baseFare, ticket, cls) : 0;
+
+  // bookingTrain: pick the best train for the actual booking call.
+  // We use the line/trainNo from matchedTrain but always pass from/to as
+  // entered — the server stores them verbatim and doesn't validate order.
+  const bookingTrain = matchedTrain;
 
   const resetPayment = () => { setClientSecret(null); setInitError(""); };
 
   async function handleConfirmPassenger() {
     setShowPassenger(false);
-    if (!matchedTrain || !total) return;
+    if (!bookingTrain || !total) return;
     if (!stripePromise) {
       setInitiating(true);
       try {
         const t = await api.generateTicket({
-          trainNo: matchedTrain.trainNo, line: matchedTrain.line,
-          from, to, departure: matchedTrain.departure, arrival: matchedTrain.arrival,
+          trainNo: bookingTrain.trainNo, line: bookingTrain.line,
+          from, to, departure: bookingTrain.departure, arrival: bookingTrain.arrival,
           fare: total, travelClass: cls,
           passengerName: passengerForm.name || undefined,
           idNumber: passengerForm.idNumber || undefined,
           email: passengerForm.email || undefined,
           phone: passengerForm.phone || undefined,
         });
-        setPaidTicket({ ticket_ref: t.ticket_ref, booked_at: t.booked_at });
+        setPaidTicket({ ticket_ref: t.ticket_ref, qr_token: t.qr_token, booked_at: t.booked_at });
       } catch (e: any) {
         setInitError(e.message ?? "Could not generate ticket.");
       } finally {
@@ -124,9 +148,9 @@ function FaresPage() {
     setInitiating(true);
     setInitError("");
     try {
-      const { clientSecret: cs } = await api.createPaymentIntent({
-        trainNo: matchedTrain.trainNo, line: matchedTrain.line,
-        from, to, departure: matchedTrain.departure, arrival: matchedTrain.arrival,
+                const { clientSecret: cs } = await api.createPaymentIntent({
+        trainNo: bookingTrain.trainNo, line: bookingTrain.line,
+        from, to, departure: bookingTrain.departure, arrival: bookingTrain.arrival,
         fare: total, travelClass: cls,
         passengerName: passengerForm.name || undefined,
         idNumber: passengerForm.idNumber || undefined,
@@ -228,7 +252,7 @@ function FaresPage() {
                   </div>
                   <button
                     onClick={() => { setPassengerForm({ name: "", idNumber: "", email: "", phone: "" }); setShowPassenger(true); }}
-                    disabled={initiating}
+                    disabled={initiating || !bookingTrain}
                     className="inline-flex items-center gap-2 rounded-sm bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-60"
                   >
                     {initiating ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
@@ -242,14 +266,16 @@ function FaresPage() {
                 </dl>
               </>
             ) : (
-              <p className="mt-4 text-sm text-muted-foreground">No direct route between these stations. Try Cape Town as origin.</p>
+              <p className="mt-4 text-sm text-muted-foreground">No shared line found between these two stations. Try stations on the same line.</p>
             )}
           </div>
 
           {paidTicket && baseFare > 0 && (
             <ETicket
               from={from} to={to} cls={cls} ticket={ticket} total={total}
-              train={matchedTrain} ticketRef={paidTicket.ticket_ref} bookedAt={paidTicket.booked_at}
+              train={bookingTrain} ticketRef={paidTicket.ticket_ref}
+              qrToken={paidTicket.qr_token}
+              bookedAt={paidTicket.booked_at}
             />
           )}
 
@@ -339,10 +365,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function ETicket({ from, to, cls, ticket, total, train, ticketRef, bookedAt }: {
+function ETicket({ from, to, cls, ticket, total, train, ticketRef, qrToken, bookedAt }: {
   from: string; to: string; cls: TravelClass; ticket: TicketTypeId; total: number;
   train: import("@/data/prasa").TrainSchedule | null;
-  ticketRef: string; bookedAt: string;
+  ticketRef: string; qrToken?: string; bookedAt: string;
 }) {
   const [downloading, setDownloading] = useState(false);
 
@@ -365,6 +391,10 @@ function ETicket({ from, to, cls, ticket, total, train, ticketRef, bookedAt }: {
     setDownloading(false);
   }
 
+  // QR encodes the raw token — portable across dev and production.
+  // Inspectors paste it into /validate, or it can be scanned and matched manually.
+  const qrValue = qrToken ?? ticketRef;
+
   return (
     <div className="overflow-hidden rounded-md border-2 border-dashed border-primary bg-card shadow-elevated">
       <div className="flex items-center justify-between bg-primary px-5 py-3 text-primary-foreground">
@@ -386,10 +416,26 @@ function ETicket({ from, to, cls, ticket, total, train, ticketRef, bookedAt }: {
           <Row label="Total" value={`R ${total.toFixed(2)}`} bold />
           <Row label="Valid" value={new Date(bookedAt).toLocaleDateString("en-ZA")} />
         </div>
-        <FakeQR seed={ticketRef} />
+        <div className="flex flex-col items-center gap-1">
+          <div className="rounded-sm bg-white p-1 shadow-sm">
+            <QRCodeSVG
+              value={qrValue}
+              size={112}
+              level="H"
+              includeMargin={false}
+              imageSettings={{
+                src: "/Train Logo.png",
+                height: 20,
+                width: 20,
+                excavate: true,
+              }}
+            />
+          </div>
+          <p className="text-center text-[9px] text-muted-foreground">Show at gate</p>
+        </div>
       </div>
       <div className="flex items-center justify-between border-t border-border bg-secondary/40 px-5 py-3 text-xs text-muted-foreground">
-        <span>Show this code at the gate.</span>
+        <span>Present this QR code to the inspector.</span>
         <button
           disabled={downloading}
           onClick={handleDownload}
@@ -411,40 +457,4 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
   );
 }
 
-// Deterministic faux-QR for the on-screen preview only
-function FakeQR({ seed }: { seed: string }) {
-  const size = 21;
-  let s = 0;
-  for (let i = 0; i < seed.length; i++) s = (s * 31 + seed.charCodeAt(i)) >>> 0;
-  const cells: boolean[] = [];
-  for (let i = 0; i < size * size; i++) {
-    s = (s * 1103515245 + 12345) >>> 0;
-    cells.push((s & 0xff) > 128);
-  }
-  const isFinder = (r: number, c: number) => {
-    const inBox = (br: number, bc: number) =>
-      r >= br && r < br + 7 && c >= bc && c < bc + 7;
-    return inBox(0, 0) || inBox(0, size - 7) || inBox(size - 7, 0);
-  };
-  const finderFill = (r: number, c: number) => {
-    const at = (br: number, bc: number) => {
-      const lr = r - br, lc = c - bc;
-      if (lr === 0 || lr === 6 || lc === 0 || lc === 6) return true;
-      if (lr >= 2 && lr <= 4 && lc >= 2 && lc <= 4) return true;
-      return false;
-    };
-    if (r < 7 && c < 7) return at(0, 0);
-    if (r < 7 && c >= size - 7) return at(0, size - 7);
-    if (r >= size - 7 && c < 7) return at(size - 7, 0);
-    return false;
-  };
-  return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="h-32 w-32 rounded-sm bg-white p-1">
-      {Array.from({ length: size * size }).map((_, i) => {
-        const r = Math.floor(i / size), c = i % size;
-        const filled = isFinder(r, c) ? finderFill(r, c) : cells[i];
-        return filled ? <rect key={i} x={c} y={r} width="1" height="1" fill="black" /> : null;
-      })}
-    </svg>
-  );
-}
+

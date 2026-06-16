@@ -13,15 +13,23 @@ const router = Router();
 async function queryTimetable(from: string, to: string): Promise<any[]> {
   try {
     const [{ data: fromStops }, { data: toStops }] = await Promise.all([
-      supabase.from("prasa_timetable").select("route_id,train_no,stop_order,departure").ilike("station_name", from).not("departure", "is", null),
-      supabase.from("prasa_timetable").select("route_id,train_no,stop_order,departure").ilike("station_name", to).not("departure", "is", null),
+      supabase.from("prasa_timetable").select("route_id,train_no,stop_order,departure,platform").ilike("station_name", from).not("departure", "is", null),
+      supabase.from("prasa_timetable").select("route_id,train_no,stop_order,departure,platform").ilike("station_name", to).not("departure", "is", null),
     ]);
     if (!fromStops?.length || !toStops?.length) return [];
     const results: any[] = [];
     for (const f of fromStops) {
       const match = toStops.find((t) => t.route_id === f.route_id && t.train_no === f.train_no && t.stop_order > f.stop_order);
       if (!match) continue;
-      results.push({ train_no: f.train_no, route_id: f.route_id, from_station: from, to_station: to, departure: f.departure, arrival: match.departure });
+      results.push({
+        train_no: f.train_no,
+        route_id: f.route_id,
+        from_station: from,
+        to_station: to,
+        departure: f.departure,
+        arrival: match.departure,
+        platform: f.platform ?? "—",
+      });
     }
     return results.sort((a, b) => a.departure.localeCompare(b.departure));
   } catch { return []; }
@@ -29,7 +37,7 @@ async function queryTimetable(from: string, to: string): Promise<any[]> {
 
 async function queryTrainStops(trainNo: string): Promise<any[]> {
   try {
-    const { data } = await supabase.from("prasa_timetable").select("station_name,stop_order,departure").eq("train_no", trainNo).not("departure", "is", null).order("stop_order", { ascending: true });
+    const { data } = await supabase.from("prasa_timetable").select("station_name,stop_order,departure,platform,route_id").eq("train_no", trainNo).not("departure", "is", null).order("stop_order", { ascending: true });
     return data ?? [];
   } catch { return []; }
 }
@@ -123,16 +131,21 @@ router.post("/", async (req, res) => {
 
   const { trains, notices, adminUpdates } = await fetchContext();
 
-  // Check for specific train number query (e.g. "train 3405", "train no 3407")
-  const trainNoMatch = message.match(/\b(3[34]\d{2})\b/);
+  // Check for specific train number query (e.g. "train 3405", "train no 3407", "train 9902", "train 9400")
+  const trainNoMatch = message.match(/\b(9[49]\d{2}|3[34]\d{2})\b/);
 
   // ── Official timetable queries — always checked first ────────────────────
   if (trainNoMatch) {
     const stops = await queryTrainStops(trainNoMatch[1]);
     if (stops.length > 0) {
-      let reply = `**Train ${trainNoMatch[1]} — Stellenbosch Line stops:**\n\n`;
-      reply += `| # | Station | Departure |\n|---|---------|-----------|\n`;
-      reply += stops.map((s, i) => `| ${i + 1} | ${s.station_name} | ${s.departure} |`).join("\n");
+      // Determine line from route_id
+      const routeId: string = stops[0]?.route_id ?? "";
+      const lineLabel = routeId.startsWith("central") ? "Central Line"
+        : routeId.startsWith("stellenbosch") ? "Stellenbosch Line"
+        : "PRASA";
+      let reply = `**Train ${trainNoMatch[1]} — ${lineLabel} stops:**\n\n`;
+      reply += `| # | Station | Departure | Platform |\n|---|---------|-----------|----------|\n`;
+      reply += stops.map((s: any, i: number) => `| ${i + 1} | ${s.station_name} | ${s.departure} | ${s.platform ?? "—"} |`).join("\n");
       res.json({ reply }); return;
     }
   }
@@ -144,13 +157,17 @@ router.post("/", async (req, res) => {
       const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
       const upcoming = ttResults.filter((r) => toMin(r.departure) >= nowMins);
       const display = (upcoming.length > 0 ? upcoming : ttResults).slice(0, 6);
-      let reply = `**Official timetable — ${from} \u2192 ${to} (Stellenbosch Line):**\n\n`;
-      reply += `| Train | Departs | Arrives | Duration |\n|-------|---------|---------|----------|\n`;
+      const routeId: string = display[0]?.route_id ?? "";
+      const lineLabel = routeId.startsWith("central") ? "Central Line"
+        : routeId.startsWith("stellenbosch") ? "Stellenbosch Line"
+        : "PRASA";
+      let reply = `**Official timetable — ${from} \u2192 ${to} (${lineLabel}):**\n\n`;
+      reply += `| Train | Departs | Arrives | Duration | Platform |\n|-------|---------|---------|----------|----------|\n`;
       reply += display.map((r) => {
         const dep = toMin(r.departure);
         const arr = toMin(r.arrival);
         const dur = arr >= dep ? arr - dep : arr + 1440 - dep;
-        return `| ${r.train_no} | ${r.departure} | ${r.arrival} | ${dur} min |`;
+        return `| ${r.train_no} | ${r.departure} | ${r.arrival} | ${dur} min | ${r.platform ?? "—"} |`;
       }).join("\n");
       if (upcoming.length === 0) reply += `\n\n_No more trains today — showing full timetable._`;
       res.json({ reply }); return;
@@ -166,13 +183,17 @@ router.post("/", async (req, res) => {
       const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
       const upcoming = ttReverse.filter((r) => toMin(r.departure) >= nowMins);
       const display = (upcoming.length > 0 ? upcoming : ttReverse).slice(0, 6);
-      let reply = `**Official timetable — ${to} \u2192 ${from} (Stellenbosch Line):**\n\n`;
-      reply += `| Train | Departs | Arrives | Duration |\n|-------|---------|---------|----------|\n`;
+      const routeId: string = display[0]?.route_id ?? "";
+      const lineLabel = routeId.startsWith("central") ? "Central Line"
+        : routeId.startsWith("stellenbosch") ? "Stellenbosch Line"
+        : "PRASA";
+      let reply = `**Official timetable — ${to} \u2192 ${from} (${lineLabel}):**\n\n`;
+      reply += `| Train | Departs | Arrives | Duration | Platform |\n|-------|---------|---------|----------|----------|\n`;
       reply += display.map((r) => {
         const dep = toMin(r.departure);
         const arr = toMin(r.arrival);
         const dur = arr >= dep ? arr - dep : arr + 1440 - dep;
-        return `| ${r.train_no} | ${r.departure} | ${r.arrival} | ${dur} min |`;
+        return `| ${r.train_no} | ${r.departure} | ${r.arrival} | ${dur} min | ${r.platform ?? "—"} |`;
       }).join("\n");
       if (upcoming.length === 0) reply += `\n\n_No more trains today — showing full timetable._`;
       res.json({ reply }); return;
