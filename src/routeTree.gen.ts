@@ -13,6 +13,7 @@ import { Route as ValidateRouteImport } from './routes/validate'
 import { Route as TrackingRouteImport } from './routes/tracking'
 import { Route as TouristRouteImport } from './routes/tourist'
 import { Route as TicketsRouteImport } from './routes/tickets'
+import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SafetyRouteImport } from './routes/safety'
@@ -27,7 +28,10 @@ import { Route as CrimeMapRouteImport } from './routes/crime-map'
 import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SecurityIndexRouteImport } from './routes/security/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as SecurityLoginRouteImport } from './routes/security/login'
+import { Route as SecurityDashboardRouteImport } from './routes/security/dashboard'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 
 const ValidateRoute = ValidateRouteImport.update({
@@ -48,6 +52,11 @@ const TouristRoute = TouristRouteImport.update({
 const TicketsRoute = TicketsRouteImport.update({
   id: '/tickets',
   path: '/tickets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SearchRoute = SearchRouteImport.update({
@@ -120,10 +129,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SecurityIndexRoute = SecurityIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SecurityRoute,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminRoute,
+} as any)
+const SecurityLoginRoute = SecurityLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => SecurityRoute,
+} as any)
+const SecurityDashboardRoute = SecurityDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => SecurityRoute,
 } as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
   id: '/login',
@@ -146,12 +170,16 @@ export interface FileRoutesByFullPath {
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
+  '/security': typeof SecurityRouteWithChildren
   '/tickets': typeof TicketsRoute
   '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
   '/validate': typeof ValidateRoute
   '/admin/login': typeof AdminLoginRoute
+  '/security/dashboard': typeof SecurityDashboardRoute
+  '/security/login': typeof SecurityLoginRoute
   '/admin/': typeof AdminIndexRoute
+  '/security/': typeof SecurityIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -172,7 +200,10 @@ export interface FileRoutesByTo {
   '/tracking': typeof TrackingRoute
   '/validate': typeof ValidateRoute
   '/admin/login': typeof AdminLoginRoute
+  '/security/dashboard': typeof SecurityDashboardRoute
+  '/security/login': typeof SecurityLoginRoute
   '/admin': typeof AdminIndexRoute
+  '/security': typeof SecurityIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -190,12 +221,16 @@ export interface FileRoutesById {
   '/safety': typeof SafetyRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
+  '/security': typeof SecurityRouteWithChildren
   '/tickets': typeof TicketsRoute
   '/tourist': typeof TouristRoute
   '/tracking': typeof TrackingRoute
   '/validate': typeof ValidateRoute
   '/admin/login': typeof AdminLoginRoute
+  '/security/dashboard': typeof SecurityDashboardRoute
+  '/security/login': typeof SecurityLoginRoute
   '/admin/': typeof AdminIndexRoute
+  '/security/': typeof SecurityIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -214,12 +249,16 @@ export interface FileRouteTypes {
     | '/safety'
     | '/saved'
     | '/search'
+    | '/security'
     | '/tickets'
     | '/tourist'
     | '/tracking'
     | '/validate'
     | '/admin/login'
+    | '/security/dashboard'
+    | '/security/login'
     | '/admin/'
+    | '/security/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -240,7 +279,10 @@ export interface FileRouteTypes {
     | '/tracking'
     | '/validate'
     | '/admin/login'
+    | '/security/dashboard'
+    | '/security/login'
     | '/admin'
+    | '/security'
   id:
     | '__root__'
     | '/'
@@ -257,12 +299,16 @@ export interface FileRouteTypes {
     | '/safety'
     | '/saved'
     | '/search'
+    | '/security'
     | '/tickets'
     | '/tourist'
     | '/tracking'
     | '/validate'
     | '/admin/login'
+    | '/security/dashboard'
+    | '/security/login'
     | '/admin/'
+    | '/security/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -280,6 +326,7 @@ export interface RootRouteChildren {
   SafetyRoute: typeof SafetyRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
+  SecurityRoute: typeof SecurityRouteWithChildren
   TicketsRoute: typeof TicketsRoute
   TouristRoute: typeof TouristRoute
   TrackingRoute: typeof TrackingRoute
@@ -314,6 +361,13 @@ declare module '@tanstack/react-router' {
       path: '/tickets'
       fullPath: '/tickets'
       preLoaderRoute: typeof TicketsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/search': {
@@ -414,12 +468,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/security/': {
+      id: '/security/'
+      path: '/'
+      fullPath: '/security/'
+      preLoaderRoute: typeof SecurityIndexRouteImport
+      parentRoute: typeof SecurityRoute
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/security/login': {
+      id: '/security/login'
+      path: '/login'
+      fullPath: '/security/login'
+      preLoaderRoute: typeof SecurityLoginRouteImport
+      parentRoute: typeof SecurityRoute
+    }
+    '/security/dashboard': {
+      id: '/security/dashboard'
+      path: '/dashboard'
+      fullPath: '/security/dashboard'
+      preLoaderRoute: typeof SecurityDashboardRouteImport
+      parentRoute: typeof SecurityRoute
     }
     '/admin/login': {
       id: '/admin/login'
@@ -443,6 +518,22 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface SecurityRouteChildren {
+  SecurityDashboardRoute: typeof SecurityDashboardRoute
+  SecurityLoginRoute: typeof SecurityLoginRoute
+  SecurityIndexRoute: typeof SecurityIndexRoute
+}
+
+const SecurityRouteChildren: SecurityRouteChildren = {
+  SecurityDashboardRoute: SecurityDashboardRoute,
+  SecurityLoginRoute: SecurityLoginRoute,
+  SecurityIndexRoute: SecurityIndexRoute,
+}
+
+const SecurityRouteWithChildren = SecurityRoute._addFileChildren(
+  SecurityRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
@@ -458,6 +549,7 @@ const rootRouteChildren: RootRouteChildren = {
   SafetyRoute: SafetyRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
+  SecurityRoute: SecurityRouteWithChildren,
   TicketsRoute: TicketsRoute,
   TouristRoute: TouristRoute,
   TrackingRoute: TrackingRoute,

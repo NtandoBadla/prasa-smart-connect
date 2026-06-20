@@ -6,6 +6,122 @@ import { supabase } from "../db";
 import { STATIONS, SCHEDULES, STATION_COORDS } from "../../src/data/prasa";
 import { crowdingAdvice, getCrowding, bestCoach } from "../../src/data/extras";
 
+// ── Safety data from Supabase (same logic as /map) ────────────────────────────
+async function fetchSafetyData() {
+  const [feedbackRes, incidentRes] = await Promise.all([
+    supabase.from("coach_feedback").select("from_station,vader_compound,hf_label,hf_confidence"),
+    supabase.from("safety_incidents").select("station,type,status,created_at"),
+  ]);
+  return { feedback: feedbackRes.data ?? [], incidents: incidentRes.data ?? [] };
+}
+
+function calcSafetyScore(avgVader: number, negPct: number, incidentCount: number) {
+  return Math.max(0, (1 - avgVader) / 2) * 0.4 + (negPct / 100) * 0.3 + Math.min(1, incidentCount / 5) * 0.3;
+}
+
+function safetyRiskLevel(score: number, incidents: number): "High Risk" | "Moderate" | "Safe" {
+  if (score >= 0.55 || incidents >= 3) return "High Risk";
+  if (score >= 0.35 || incidents >= 1) return "Moderate";
+  return "Safe";
+}
+
+async function safetyStationReply(station?: string): Promise<string> {
+  const { feedback, incidents } = await fetchSafetyData();
+
+  const sentMap: Record<string, { compounds: number[]; negCount: number; total: number }> = {};
+  feedback.forEach((f: any) => {
+    const st = f.from_station;
+    if (!st) return;
+    if (!sentMap[st]) sentMap[st] = { compounds: [], negCount: 0, total: 0 };
+    sentMap[st].compounds.push(f.vader_compound);
+    sentMap[st].total += 1;
+    if ((f.hf_label === "negative" && f.hf_confidence > 0.5) || f.vader_compound < -0.05)
+      sentMap[st].negCount += 1;
+  });
+
+  const incMap: Record<string, { count: number; types: string[] }> = {};
+  incidents.forEach((i: any) => {
+    if (!incMap[i.station]) incMap[i.station] = { count: 0, types: [] };
+    incMap[i.station].count += 1;
+    if (!incMap[i.station].types.includes(i.type)) incMap[i.station].types.push(i.type);
+  });
+
+  // Single station query
+  if (station) {
+    const sa = sentMap[station];
+    const inc = incMap[station] ?? { count: 0, types: [] };
+    const feedbackCount = sa?.total ?? 0;
+    const avgVader = sa && sa.compounds.length > 0 ? sa.compounds.reduce((a: number, b: number) => a + b, 0) / sa.compounds.length : 0.1;
+    const negPct = feedbackCount > 0 ? (sa.negCount / feedbackCount) * 100 : 0;
+    const score = calcSafetyScore(avgVader, negPct, inc.count);
+    const risk = safetyRiskLevel(score, inc.count);
+    const emoji = risk === "High Risk" ? "🔴" : risk === "Moderate" ? "🟠" : "🟢";
+
+    let reply = `**${emoji} Safety Report — ${station}**\n\n`;
+    reply += `| Metric | Value |\n|--------|-------|\n`;
+    reply += `| Risk Level | **${risk}** |\n`;
+    reply += `| Reported Incidents | ${inc.count} |\n`;
+    reply += `| Incident Types | ${inc.types.length > 0 ? inc.types.join(", ") : "None reported"} |\n`;
+    reply += `| Passenger Feedback | ${feedbackCount} submission(s) |\n`;
+    reply += `| Negative Feedback | ${negPct.toFixed(0)}% |\n`;
+    reply += `| Sentiment Score | ${avgVader >= 0 ? "+" : ""}${avgVader.toFixed(2)} |\n`;
+
+    if (risk === "High Risk") reply += `\n⚠ **Caution advised at ${station}.** Consider travelling in a group and staying alert.`;
+    else if (risk === "Moderate") reply += `\n⚠ Some incidents reported at ${station}. Stay aware of your surroundings.`;
+    else reply += `\n✅ ${station} is currently considered safe based on available data.`;
+
+    reply += `\n\n_Data sourced from live incident reports and passenger sentiment. View full map at /map._`;
+    return reply;
+  }
+
+  // Overview of all stations
+  const stationsWithData = STATIONS.filter((st) => sentMap[st] || incMap[st]);
+  if (stationsWithData.length === 0) {
+    return `No safety incident data available yet. Passengers can submit reports via the **Safety** section of this app.`;
+  }
+
+  const rows = stationsWithData.map((st) => {
+    const sa = sentMap[st];
+    const inc = incMap[st] ?? { count: 0, types: [] };
+    const avgVader = sa && sa.compounds.length > 0 ? sa.compounds.reduce((a: number, b: number) => a + b, 0) / sa.compounds.length : 0.1;
+    const negPct = sa && sa.total > 0 ? (sa.negCount / sa.total) * 100 : 0;
+    const risk = safetyRiskLevel(calcSafetyScore(avgVader, negPct, inc.count), inc.count);
+    const emoji = risk === "High Risk" ? "🔴" : risk === "Moderate" ? "🟠" : "🟢";
+    return { st, risk, emoji, incidents: inc.count, types: inc.types };
+  }).sort((a, b) => ["High Risk", "Moderate", "Safe"].indexOf(a.risk) - ["High Risk", "Moderate", "Safe"].indexOf(b.risk));
+
+  let reply = `**Safety Overview — All Stations** _(live incident data)_\n\n`;
+  reply += `| Station | Risk | Incidents | Types |\n|---------|------|-----------|-------|\n`;
+  reply += rows.map((r) => `| ${r.st} | ${r.emoji} ${r.risk} | ${r.incidents} | ${r.types.join(", ") || "—"} |`).join("\n");
+  reply += `\n\n_View the full interactive map at /map_`;
+  return reply;
+}
+
+// ── Static stops/route fallback using SCHEDULES data ─────────────────────────
+function staticRouteReply(from: string, to?: string): string {
+  const candidates = SCHEDULES.filter((s) => {
+    const stops = s.stops.map((x) => x.toLowerCase());
+    const fi = stops.indexOf(from.toLowerCase());
+    const ti = to ? stops.indexOf(to.toLowerCase()) : stops.length - 1;
+    return fi !== -1 && (to ? ti !== -1 && fi < ti : true);
+  });
+
+  if (candidates.length === 0) {
+    return `No route found from **${from}**${to ? ` to **${to}**` : ""}. Available stations: ${STATIONS.slice(0, 10).join(", ")}, and more.`;
+  }
+
+  const src = candidates[0];
+  const fromIdx = src.stops.map((x) => x.toLowerCase()).indexOf(from.toLowerCase());
+  const toIdx = to ? src.stops.map((x) => x.toLowerCase()).indexOf(to.toLowerCase()) : src.stops.length - 1;
+  const stopsOnRoute = src.stops.slice(fromIdx, toIdx + 1);
+
+  let reply = `**Stops from ${from}${to ? ` to ${to}` : ""} (${src.line}):**\n\n`;
+  reply += `| # | Station |\n|---|---------|\n`;
+  reply += stopsOnRoute.map((s, i) => `| ${i + 1} | ${s} |`).join("\n");
+  reply += `\n\n_${candidates.length} service(s) operate this route. Use /search to book a ticket._`;
+  return reply;
+}
+
 const router = Router();
 
 // ── Fetch all live context from Supabase ──────────────────────────────────────
@@ -126,17 +242,19 @@ router.post("/", async (req, res) => {
 
   const { message } = parsed.data;
   const apiKey = process.env.OPENAI_API_KEY?.trim();
-  const lower = message.toLowerCase();
-  const { from, to } = detectStations(message);
+  // Normalise common Nonkqubela spelling variants (nonqubela, nonkqubela, nongqubela, etc.)
+  const normMessage = message.replace(/non[gkq]*[qu]bela/gi, "Nonkqubela");
+  const lower = normMessage.toLowerCase();
+  const { from, to } = detectStations(normMessage);
 
   const { trains, notices, adminUpdates } = await fetchContext();
 
-  // Check for specific train number query (e.g. "train 3405", "train no 3407", "train 9902", "train 9400")
-  const trainNoMatch = message.match(/\b(9[49]\d{2}|3[34]\d{2})\b/);
+  // Check for specific train number query — covers all 4-digit PRASA train numbers
+  const trainNoMatch = normMessage.match(/\b(\d{4})\b/);
 
   // ── Official timetable queries — always checked first ────────────────────
   if (trainNoMatch) {
-    const stops = await queryTrainStops(trainNoMatch[1]);
+    const stops = await queryTrainStops(trainNoMatch[1] ?? "");
     if (stops.length > 0) {
       // Determine line from route_id
       const routeId: string = stops[0]?.route_id ?? "";
@@ -200,12 +318,28 @@ router.post("/", async (req, res) => {
     }
   }
 
+  // Safety / station safety queries — always use live incident data
+  if (/(how safe|is.*safe|safety|crime|incident|dangerous|risky|safe to travel|safe at)/.test(lower)) {
+    const reply = await safetyStationReply(from);
+    res.json({ reply }); return;
+  }
+
+  // Stops / route query — use timetable DB first, fall back to static SCHEDULES
+  if (/(stop|stops|route|which station|what station|pass through|stations on|line stop)/.test(lower) && (from || to)) {
+    if (from) {
+      const ttStops = from && !to ? await queryTimetable(from, "") : [];
+      if (ttStops.length === 0) {
+        res.json({ reply: staticRouteReply(from, to) }); return;
+      }
+    }
+  }
+
   // Always try rule-based first — covers fares, greetings, coach, arrival, crowding, contact
   const needsLiveAI = apiKey && /(delay|cancel|status|disruption|suspend|on time|running|what.*happening|any.*problem|latest|update|live|current|today|now)/.test(lower)
     && !/(fare|price|cost|how much|rand|zar|pay|charge|hi|hello|hey|howzit|safe|coach|crowd|contact|call centre|next stop|next station|platform|exit|arriving)/.test(lower);
 
   if (!needsLiveAI) {
-    res.json({ reply: ruleBasedReply(message, trains, notices, adminUpdates) });
+    res.json({ reply: ruleBasedReply(normMessage, trains, notices, adminUpdates) });
     return;
   }
 
@@ -216,7 +350,7 @@ router.post("/", async (req, res) => {
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: buildPrompt(trains, notices, adminUpdates, from, to) },
-          { role: "user", content: message },
+          { role: "user", content: normMessage },
         ],
         max_tokens: 600,
         temperature: 0.2,
@@ -227,8 +361,7 @@ router.post("/", async (req, res) => {
   } catch (err: any) {
     const status = err?.response?.status;
     console.error(`OpenAI error (${status ?? "unknown"}):`, err.message);
-    // Always fall back gracefully — never surface an error to the user
-    res.json({ reply: ruleBasedReply(message, trains, notices, adminUpdates) });
+    res.json({ reply: ruleBasedReply(normMessage, trains, notices, adminUpdates) });
   }
 });
 
@@ -429,7 +562,8 @@ function ruleBasedReply(message: string, trains: any[], notices: any[], adminUpd
     reply += `• Route info — "Train from Stellenbosch to Cape Town"\n`;
     reply += `• Safe coach — "Safe coach from Khayelitsha"\n`;
     reply += `• Crowding — "How busy is the Southern Line?"\n`;
-    reply += `• Arrival — "Next stop from Cape Town to Claremont"\n\n`;
+    reply += `• Arrival — "Next stop from Cape Town to Claremont"\n`;
+    reply += `• Station safety — "Is Cape Town station safe?"\n\n`;
     if (hasLive) reply += `I currently have **${trains.length}** live train update(s) and **${notices.length}** notice(s).`;
     else reply += `No live data at the moment — try again shortly.`;
     return reply;
@@ -439,7 +573,7 @@ function ruleBasedReply(message: string, trains: any[], notices: any[], adminUpd
   const lineMatch = ["Southern Line", "Northern Line", "Central Line", "Cape Flats Line"].find(
     (l) => lower.includes(l.toLowerCase())
   );
-  const { from, to } = detectStations(message);
+  const { from, to } = detectStations(message); // message already normalised by caller
 
   // Filter trains relevant to the query — strict match when both from+to are known
   const relevantTrains = trains.filter((t: any) => {
@@ -492,8 +626,10 @@ function ruleBasedReply(message: string, trains: any[], notices: any[], adminUpd
   }
 
   // Route / schedule query
-  if (/(train|when|next|depart|arriv|route|from|to|go|travel|get to|schedule)/.test(lower)) {
+  if (/(train|when|next|depart|arriv|route|from|to|go|travel|get to|schedule|stop|stops|pass through|stations on)/.test(lower)) {
     if (trains.length === 0 && notices.length === 0) {
+      // Fall back to static SCHEDULES data
+      if (from) return staticRouteReply(from, to);
       return "No live train data available right now. Please check cttrains.co.za for the latest schedules.";
     }
     return buildLiveReply(relevantTrains, relevantNotices, relevantUpdates, lineMatch, from, to);

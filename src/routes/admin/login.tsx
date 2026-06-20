@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { Train, Lock, Home } from "lucide-react";
+import { Lock, Home } from "lucide-react";
 
 export const Route = createFileRoute("/admin/login")({
   component: AdminLogin,
@@ -18,9 +18,18 @@ function AdminLogin() {
     setError("");
     setLoading(true);
     try {
-      const { token } = await api.login(form.username, form.password);
-      localStorage.setItem("admin_token", token);
-      navigate({ to: "/admin" });
+      // Try admin first, fall back to security
+      try {
+        const { token } = await api.login(form.username, form.password);
+        localStorage.setItem("admin_token", token);
+        navigate({ to: "/admin" });
+        return;
+      } catch {
+        // not an admin — try security
+      }
+      const { token } = await api.securityLogin(form.username, form.password);
+      localStorage.setItem("security_token", token);
+      navigate({ to: "/security" });
     } catch {
       setError("Invalid username or password.");
     } finally {
@@ -32,15 +41,10 @@ function AdminLogin() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm rounded-md border border-border bg-card p-8 shadow-elevated">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <img
-            src="/Train Logo.png"
-            alt="PRASA Logo"
-            className="h-16 w-16 object-contain"
-          />
-          <h1 className="text-xl font-bold text-foreground">PRASA Admin</h1>
-          <p className="text-sm text-muted-foreground">Sign in to manage the network</p>
+          <img src="/Train Logo.png" alt="PRASA Logo" className="h-16 w-16 object-contain" />
+          <h1 className="text-xl font-bold text-foreground">PRASA Staff Portal</h1>
+          <p className="text-sm text-muted-foreground">Sign in to continue</p>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Username</label>
@@ -71,7 +75,6 @@ function AdminLogin() {
             <Lock className="h-4 w-4" />
             {loading ? "Signing in…" : "Sign in"}
           </button>
-
           <Link
             to="/"
             className="flex w-full items-center justify-center gap-2 rounded-sm border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary"

@@ -24,6 +24,7 @@ import lostFoundRouter from "./routes/lostFound";
 import safetyRouter from "./routes/safety";
 import stationSearchRouter from "./routes/stationSearch";
 import timetableRouter from "./routes/timetable";
+import securityRouter from "./routes/security";
 
 import { SCHEDULES as SEED_SCHEDULES, ALERTS as SEED_ALERTS } from "../src/data/prasa";
 import type { TrainSchedule, ServiceAlert } from "../src/data/prasa";
@@ -179,6 +180,7 @@ app.use("/api/lost-found",   lostFoundRouter);
 app.use("/api/safety",       safetyRouter);
 app.use("/api/stations",     stationSearchRouter);
 app.use("/api/timetable",    timetableRouter);
+app.use("/api/security",     securityRouter);
 
 app.get("/api/live-trains", async (_req, res) => {
   const { trains } = await runScrape().catch(() => ({ trains: [] }));

@@ -8,7 +8,7 @@ interface ChatMsg {
 }
 
 const GREETING =
-  "Hi! I'm your PRASA Metrorail assistant. Try:\n• \"Next train from Cape Town to Bellville\"\n• \"Are there delays today?\"\n• \"Next stop from Cape Town to Claremont\"\n• \"Fare from Cape Town to Simon's Town\"";
+  "Hi! I'm your PRASA Metrorail assistant. Try:\n• \"Next train from Cape Town to Bellville\"\n• \"Are there delays today?\"\n• \"Stops from Cape Town to Claremont\"\n• \"Is Khayelitsha station safe?\"\n• \"Fare from Cape Town to Simon's Town\"";
 
 
 // ── Chatbot component ─────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ export function Chatbot() {
     }
   };
 
-  const suggestions = ["Next stop Cape Town to Claremont", "Delays today?", "Fare Cape Town to Bellville"];
+  const suggestions = ["Stops Cape Town to Claremont", "Is Cape Town station safe?", "Delays today?"];
 
   return (
     <>

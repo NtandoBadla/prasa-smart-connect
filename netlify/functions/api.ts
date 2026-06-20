@@ -21,6 +21,7 @@ import lostFoundRouter  from "../../server/routes/lostFound";
 import safetyRouter     from "../../server/routes/safety";
 import timetableRouter  from "../../server/routes/timetable";
 import stationSearchRouter from "../../server/routes/stationSearch";
+import securityRouter from "../../server/routes/security";
 
 import { SCHEDULES as SEED_SCHEDULES, ALERTS as SEED_ALERTS } from "../../src/data/prasa";
 import type { TrainSchedule, ServiceAlert } from "../../src/data/prasa";
@@ -199,6 +200,7 @@ app.use(["/api/lost-found",    "/lost-found"],    lostFoundRouter);
 app.use(["/api/safety",        "/safety"],        safetyRouter);
 app.use(["/api/timetable",     "/timetable"],     timetableRouter);
 app.use(["/api/stations",      "/stations"],      stationSearchRouter);
+app.use(["/api/security",      "/security"],      securityRouter);
 
 // ── Admin: Tickets ────────────────────────────────────────────────────────────
 const TICKET_SELECT = "id, ticket_ref, qr_token, user_id, passenger_name, id_number, phone, email, train_no, line, from_station, to_station, departure, arrival, fare, travel_class, payment_intent_id, payment_status, used, used_at, booked_at";
