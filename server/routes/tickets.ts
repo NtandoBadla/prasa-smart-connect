@@ -22,6 +22,21 @@ function makeQrToken(): string {
   return randomBytes(32).toString("hex");
 }
 
+function expiresAt(travelClass?: string): string | null {
+  const tc = (travelClass ?? "").toLowerCase();
+  if (tc.includes("weekly")) {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString();
+  }
+  if (tc.includes("monthly")) {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    return d.toISOString();
+  }
+  return null;
+}
+
 const TICKET_SELECT = "id, ticket_ref, qr_token, user_id, passenger_name, id_number, phone, email, train_no, line, from_station, to_station, departure, arrival, fare, travel_class, payment_intent_id, payment_status, used, used_at, booked_at";
 
 function ticketSmsText(t: any): string {
@@ -95,6 +110,7 @@ router.post("/create-payment-intent", async (req, res) => {
       payment_intent_id: paymentIntent.id,
       payment_status: "pending",
       used: false,
+      expires_at: expiresAt(travelClass),
       booked_at: new Date().toISOString(),
     });
 
@@ -261,6 +277,7 @@ router.post("/generate", async (req, res) => {
     travel_class: travelClass ?? "Metro",
     payment_status: "paid",
     used: false,
+    expires_at: expiresAt(travelClass),
     booked_at: new Date().toISOString(),
   }).select(TICKET_SELECT).single();
 
