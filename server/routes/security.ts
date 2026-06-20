@@ -78,6 +78,11 @@ router.post("/scan", requireSecurity, async (req, res) => {
     return;
   }
 
+  // Determine ticket type
+  const travelClass: string = ((ticket as any).travel_class ?? "").toLowerCase();
+  const isPass = travelClass.includes("weekly") || travelClass.includes("monthly");
+  const ridesRemaining: number | null = (ticket as any).rides_remaining;
+
   // Blacklist check
   if ((ticket as any).blacklisted) {
     validationResult = "blacklisted";
@@ -109,7 +114,6 @@ router.post("/scan", requireSecurity, async (req, res) => {
   }
 
   // Rides remaining check (multi-ride tickets)
-  const ridesRemaining: number | null = (ticket as any).rides_remaining;
   if (ridesRemaining !== null && ridesRemaining !== undefined && ridesRemaining <= 0) {
     validationResult = "no_rides";
     await logScan({ ticketId: ticket.id, officerId, stationName, result: validationResult });
@@ -117,22 +121,22 @@ router.post("/scan", requireSecurity, async (req, res) => {
     return;
   }
 
-  // Single-trip: already used
-  if (ridesRemaining === null || ridesRemaining === undefined) {
-    if (ticket.used) {
-      validationResult = "used";
-      await logScan({ ticketId: ticket.id, officerId, stationName, result: validationResult });
-      res.json({ valid: false, reason: "used", message: "Ticket already used.", used_at: ticket.used_at, ticket });
-      return;
-    }
-    // Mark single-trip as used
-    await supabase
-      .from("tickets")
-      .update({ used: true, used_at: new Date().toISOString() })
-      .eq("id", ticket.id)
-      .eq("used", false);
-  } else {
-    // Deduct one ride
+  if (isPass) {
+    // Weekly/monthly pass — never mark as used, just log and approve
+    validationResult = "valid";
+    await logScan({ ticketId: ticket.id, officerId, stationName, result: validationResult });
+    res.json({
+      valid: true,
+      reason: "valid",
+      message: "Pass is valid.",
+      rides_remaining: null,
+      ticket,
+    });
+    return;
+  }
+
+  if (ridesRemaining !== null && ridesRemaining !== undefined) {
+    // Multi-ride ticket — deduct one ride
     await supabase
       .from("tickets")
       .update({
@@ -140,16 +144,40 @@ router.post("/scan", requireSecurity, async (req, res) => {
         ...(ridesRemaining - 1 === 0 ? { used: true, used_at: new Date().toISOString() } : {}),
       })
       .eq("id", ticket.id);
+
+    validationResult = "valid";
+    await logScan({ ticketId: ticket.id, officerId, stationName, result: validationResult });
+    res.json({
+      valid: true,
+      reason: "valid",
+      message: "Ticket is valid.",
+      rides_remaining: ridesRemaining - 1,
+      ticket,
+    });
+    return;
   }
+
+  // Single-trip ticket
+  if (ticket.used) {
+    validationResult = "used";
+    await logScan({ ticketId: ticket.id, officerId, stationName, result: validationResult });
+    res.json({ valid: false, reason: "used", message: "Ticket already used.", used_at: ticket.used_at, ticket });
+    return;
+  }
+
+  await supabase
+    .from("tickets")
+    .update({ used: true, used_at: new Date().toISOString() })
+    .eq("id", ticket.id)
+    .eq("used", false);
 
   validationResult = "valid";
   await logScan({ ticketId: ticket.id, officerId, stationName, result: validationResult });
-
   res.json({
     valid: true,
     reason: "valid",
     message: "Ticket is valid.",
-    rides_remaining: ridesRemaining !== null && ridesRemaining !== undefined ? ridesRemaining - 1 : null,
+    rides_remaining: null,
     ticket,
   });
 });

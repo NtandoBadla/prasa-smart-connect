@@ -146,6 +146,16 @@ function SecurityScanner() {
                   <dd className="font-medium text-foreground">{result.rides_remaining}</dd>
                 </>
               )}
+              {result.ticket && (() => {
+                const tc = (result.ticket.travel_class ?? "").toLowerCase();
+                const isPass = tc.includes("weekly") || tc.includes("monthly");
+                return isPass ? (
+                  <>
+                    <dt className="text-muted-foreground">Pass Type</dt>
+                    <dd className="font-medium text-foreground">{result.ticket.travel_class} — unlimited rides until expiry</dd>
+                  </>
+                ) : null;
+              })()}
               <dt className="text-muted-foreground">Status</dt>
               <dd className={`font-bold uppercase ${result.valid ? "text-green-600" : "text-red-600"}`}>
                 {result.valid ? "ACTIVE" : result.reason.replace(/_/g, " ")}
