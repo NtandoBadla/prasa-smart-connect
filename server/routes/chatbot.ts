@@ -77,7 +77,7 @@ async function safetyStationReply(station?: string): Promise<string> {
   // Overview of all stations
   const stationsWithData = STATIONS.filter((st) => sentMap[st] || incMap[st]);
   if (stationsWithData.length === 0) {
-    return `No safety incident data available yet. Passengers can submit reports via the **Safety** section of this app.`;
+    return `Based on general PRASA Metrorail safety guidance:\n\n🔴 **Exercise extra caution at:**\n- Langa, Nyanga, Philippi, Heideveld (Cape Flats Line)\n- Khayelitsha, Nonkqubela, Chris Hani (Khayelitsha Line)\n\n🟠 **Stay alert at:**\n- Salt River, Maitland, Bellville\n\n🟢 **Generally safer stations:**\n- Cape Town, Claremont, Rondebosch, Newlands, Observatory, Stellenbosch\n\n💡 **Safety Tips:**\n- Travel during peak hours when platforms are busier\n- Use rear coaches (6–8) — less crowded and generally safer\n- Report incidents via the **Safety** section of this app\n- Keep valuables out of sight\n\n_No live incident data yet. This is general guidance only. Submit safety reports in the app to improve accuracy._`;
   }
 
   const rows = stationsWithData.map((st) => {
@@ -90,10 +90,36 @@ async function safetyStationReply(station?: string): Promise<string> {
     return { st, risk, emoji, incidents: inc.count, types: inc.types };
   }).sort((a, b) => ["High Risk", "Moderate", "Safe"].indexOf(a.risk) - ["High Risk", "Moderate", "Safe"].indexOf(b.risk));
 
-  let reply = `**Safety Overview — All Stations** _(live incident data)_\n\n`;
-  reply += `| Station | Risk | Incidents | Types |\n|---------|------|-----------|-------|\n`;
-  reply += rows.map((r) => `| ${r.st} | ${r.emoji} ${r.risk} | ${r.incidents} | ${r.types.join(", ") || "—"} |`).join("\n");
-  reply += `\n\n_View the full interactive map at /map_`;
+  const highRisk = rows.filter((r) => r.risk === "High Risk");
+  const moderate = rows.filter((r) => r.risk === "Moderate");
+
+  let reply = `**Areas to be cautious of on the PRASA Metrorail network:**\n\n`;
+
+  if (highRisk.length > 0) {
+    reply += `🔴 **High Risk Stations — Avoid if possible:**\n`;
+    reply += highRisk.map((r) => `- **${r.st}** — ${r.incidents} incident(s): ${r.types.join(", ") || "general safety concerns"}`).join("\n");
+    reply += "\n\n";
+  }
+
+  if (moderate.length > 0) {
+    reply += `🟠 **Moderate Risk — Stay alert:**\n`;
+    reply += moderate.map((r) => `- **${r.st}** — ${r.incidents} incident(s): ${r.types.join(", ") || "minor concerns"}`).join("\n");
+    reply += "\n\n";
+  }
+
+  const safe = rows.filter((r) => r.risk === "Safe");
+  if (safe.length > 0) {
+    reply += `🟢 **Generally Safe Stations:**\n`;
+    reply += safe.map((r) => `- ${r.st}`).join(", ");
+    reply += "\n\n";
+  }
+
+  reply += `💡 **Safety Tips:**\n`;
+  reply += `- Travel during peak hours when platforms are busier\n`;
+  reply += `- Use rear coaches (6–8) — less crowded and generally safer\n`;
+  reply += `- Report incidents via the **Safety** section of this app\n`;
+  reply += `- Keep valuables out of sight\n\n`;
+  reply += `_Data based on live incident reports and passenger feedback. View the full map at /map._`;
   return reply;
 }
 
@@ -319,7 +345,7 @@ router.post("/", async (req, res) => {
   }
 
   // Safety / station safety queries — always use live incident data
-  if (/(how safe|is.*safe|safety|crime|incident|dangerous|risky|safe to travel|safe at)/.test(lower)) {
+  if (/(how safe|is.*safe|safety|crime|incident|dangerous|risky|safe to travel|safe at|avoid|which area|areas to avoid|unsafe|not safe|danger)/.test(lower)) {
     const reply = await safetyStationReply(from);
     res.json({ reply }); return;
   }
@@ -633,6 +659,11 @@ function ruleBasedReply(message: string, trains: any[], notices: any[], adminUpd
       return "No live train data available right now. Please check cttrains.co.za for the latest schedules.";
     }
     return buildLiveReply(relevantTrains, relevantNotices, relevantUpdates, lineMatch, from, to);
+  }
+
+  // Areas to avoid / general safety overview — no station needed
+  if (/(avoid|which area|areas to avoid|unsafe|not safe|danger|where.*safe|safe.*where)/.test(lower)) {
+    return await safetyStationReply(undefined);
   }
 
   // Safe coach / crowding
