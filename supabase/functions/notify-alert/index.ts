@@ -130,6 +130,18 @@ async function fetchLineContext(line: string, excludeId: string | number): Promi
   return parts.join("\n\n");
 }
 
+// ── Resolve partial/truncated station name to canonical ─────────────────────
+const ALL_STATIONS = Object.values(LINE_STOPS).flat();
+function resolveStation(raw: string): string {
+  if (!raw) return raw;
+  const r = raw.trim().toLowerCase();
+  const exact = ALL_STATIONS.find((s) => s.toLowerCase() === r);
+  if (exact) return exact;
+  const starts = ALL_STATIONS.find((s) => s.toLowerCase().startsWith(r));
+  if (starts) return starts;
+  return raw.trim();
+}
+
 serve(async (req) => {
   const body = await req.json();
   const record = body.record ?? body;
@@ -141,7 +153,7 @@ serve(async (req) => {
   }
 
   const line = normaliseLine(rawLine ?? "");
-  const triggerStation: string = station ?? from_station ?? "";
+  const triggerStation: string = resolveStation(station ?? from_station ?? "");
   const affectedStations = stationsForLine(line, triggerStation);
 
   // Fetch all subscribers at any station on this line (deduplicated by email/phone)
