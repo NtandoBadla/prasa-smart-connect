@@ -1,7 +1,6 @@
-<<<<<<< HEAD
 # PRASA Smart Connect
 
-A smart commuter web application for PRASA Metrorail passengers in the Western Cape, South Africa. The platform provides real-time train tracking, trip planning, service alerts, lost & found reporting, safety incident reporting, and an AI-powered chatbot — all in one place.
+A full-stack smart commuter platform for PRASA Metrorail passengers in the Western Cape, South Africa. The platform provides real-time train tracking, trip planning, service alerts, AI-powered chatbot assistance, lost & found management, safety incident reporting, ticket generation, crowd sentiment analysis, and automated database-driven notifications — all in one place.
 
 ---
 
@@ -15,6 +14,8 @@ A smart commuter web application for PRASA Metrorail passengers in the Western C
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
 - [Running the App](#running-the-app)
+- [Database Setup](#database-setup)
+- [Supabase Automation](#supabase-automation)
 - [Deployment](#deployment)
 - [API Overview](#api-overview)
 - [Admin Panel](#admin-panel)
@@ -23,9 +24,9 @@ A smart commuter web application for PRASA Metrorail passengers in the Western C
 
 ## About the Project
 
-PRASA Smart Connect is a full-stack web application built to improve the daily commuting experience for Metrorail passengers in Cape Town. It aggregates live train status data, provides journey planning tools, enables passengers to report lost items and safety incidents, and allows admins to push real-time service updates with automatic email notifications to subscribers.
+PRASA Smart Connect is a production-ready web application built to improve the daily commuting experience for Cape Town Metrorail passengers. It aggregates live train status data, provides journey planning tools, enables passengers to report lost items and safety incidents, and allows admins to push real-time service updates with automatic email and SMS notifications to subscribers.
 
-The application is deployed on **Netlify** with a **Supabase** PostgreSQL backend and uses **EmailJS** for transactional email delivery.
+The application is deployed on **Netlify** with a **Supabase** PostgreSQL backend, **Supabase Edge Functions** for serverless automation, and **EmailJS** + **SMSPortal** for transactional notifications.
 
 ---
 
@@ -42,11 +43,12 @@ The application is deployed on **Netlify** with a **Supabase** PostgreSQL backen
 | News | `/news` | Latest PRASA news with auto-refresh |
 | Fares | `/fares` | Fare information by line and zone |
 | Crowding & Sentiment | `/crowding` | AI-powered crowd level and safety rating from passenger feedback |
-| Lost & Found | `/lost-found` | Report lost items and receive email notification when found |
+| Lost & Found | `/lost-found` | Report lost items and receive email/SMS notification when found |
 | Safety Reports | `/safety` | Report safety incidents at stations |
 | My Tickets | `/tickets` | View generated ticket history |
 | Register | `/register` | Subscribe to station-specific email alerts |
 | Admin Panel | `/admin` | Full admin dashboard (protected) |
+| AI Chatbot | `/chatbot` | Intelligent rule-based + OpenAI-powered train assistant |
 
 ---
 
@@ -79,11 +81,15 @@ The application is deployed on **Netlify** with a **Supabase** PostgreSQL backen
 ### Database & Services
 | Service | Purpose |
 |---|---|
-| Supabase (PostgreSQL) | Primary database — users, subscriptions, tickets, lost & found, safety incidents, coach feedback, scraped trains |
-| EmailJS | Transactional email — subscriber alerts, lost & found notifications, train update notifications |
+| Supabase (PostgreSQL) | Primary database — all application tables |
+| Supabase Edge Functions | Serverless automation — alerts, notifications, daily reports |
+| Supabase Realtime | Live push for train updates, alerts, automation logs |
+| EmailJS | Transactional email — subscriber alerts, lost & found notifications |
+| SMSPortal | SMS notifications — train alerts, lost & found (optional) |
 | Hugging Face Inference API | Sentiment analysis for coach feedback (distilroberta-base) |
 | OpenAI API | AI chatbot responses (optional, falls back to rule-based) |
 | SerpAPI | News scraping (optional) |
+| Stripe | Payment processing for ticket purchases |
 
 ### Deployment
 | Tool | Purpose |
@@ -100,44 +106,57 @@ The application is deployed on **Netlify** with a **Supabase** PostgreSQL backen
 prasa-smart-connect/
 ├── netlify/
 │   └── functions/
-│       └── api.ts          # Serverless Express app (production backend)
+│       └── api.ts                  # Serverless Express app (production backend)
 ├── server/
+│   ├── middleware/                 # Auth middleware
 │   ├── routes/
-│   │   ├── adminUpdate.ts  # Train status updates + subscriber notifications
-│   │   ├── chatbot.ts      # AI chatbot endpoint
-│   │   ├── lostFound.ts    # Lost & found public endpoints
-│   │   ├── register.ts     # User registration
-│   │   ├── safety.ts       # Safety incident reporting
-│   │   ├── sentiment.ts    # VADER + HuggingFace sentiment analysis
-│   │   ├── stationSearch.ts# Station search (OpenStreetMap)
-│   │   ├── subscribe.ts    # Station alert subscriptions
-│   │   └── tickets.ts      # Ticket generation and history
-│   ├── db.ts               # Supabase client
-│   ├── index.ts            # Local development Express server
-│   ├── mailer.ts           # EmailJS email sending functions
-│   ├── scraper.ts          # cttrains.co.za live train scraper
-│   └── validate.ts         # Zod validation schemas
+│   │   ├── adminUpdate.ts          # Train status updates + subscriber notifications
+│   │   ├── chatbot.ts              # AI chatbot endpoint
+│   │   ├── lostFound.ts            # Lost & found public endpoints
+│   │   ├── register.ts             # User registration
+│   │   ├── safety.ts               # Safety incident reporting
+│   │   ├── sentiment.ts            # VADER + HuggingFace sentiment analysis
+│   │   ├── stationSearch.ts        # Station search (OpenStreetMap)
+│   │   ├── subscribe.ts            # Station alert subscriptions
+│   │   └── tickets.ts              # Ticket generation and history
+│   ├── automation.ts               # Automation helpers (ticket expiry batch job)
+│   ├── db.ts                       # Supabase client
+│   ├── index.ts                    # Local development Express server
+│   ├── mailer.ts                   # EmailJS email sending functions
+│   ├── scraper.ts                  # cttrains.co.za live train scraper
+│   └── validate.ts                 # Zod validation schemas
+├── supabase/
+│   ├── functions/
+│   │   ├── notify-alert/           # Edge Function — email/SMS on train alerts
+│   │   ├── lost-found-notify/      # Edge Function — email/SMS on item matched
+│   │   ├── recalculate-crowding/   # Edge Function — refresh crowding snapshot
+│   │   └── daily-report/           # Edge Function — daily stats report (pg_cron)
+│   └── migrations/
+│       └── automation.sql          # Automation tables + DB triggers
 ├── src/
-│   ├── components/         # Shared UI components (Header, Footer, Chatbot, etc.)
+│   ├── components/                 # Shared UI components (Header, Footer, Chatbot, etc.)
 │   ├── data/
-│   │   ├── prasa.ts        # Station data, schedule seeds, line definitions
-│   │   └── extras.ts       # News types, trip planner logic
-│   ├── hooks/              # Custom React hooks
+│   │   ├── prasa.ts                # Station data, schedule seeds, line definitions
+│   │   └── extras.ts               # News types, trip planner logic
+│   ├── hooks/                      # Custom React hooks
 │   ├── lib/
-│   │   ├── api.ts          # Frontend API client (all fetch calls)
-│   │   └── utils.ts        # Utility functions
+│   │   ├── api.ts                  # Frontend API client (all fetch calls)
+│   │   └── utils.ts                # Utility functions
 │   ├── routes/
-│   │   ├── admin/          # Admin dashboard and login
-│   │   └── *.tsx           # All page routes
-│   └── main.tsx            # React entry point
-├── .env                    # Local environment variables (not committed)
-├── .env.example            # Environment variable template
-├── netlify.toml            # Netlify build and redirect configuration
-├── supabase_migration.sql  # Database schema
+│   │   ├── admin/                  # Admin dashboard and login
+│   │   └── *.tsx                   # All page routes
+│   └── main.tsx                    # React entry point
+├── scripts/
+│   ├── test-connections.ts         # Test all external service connections
+│   └── seed-timetable.ts           # Seed PRASA timetable data
+├── .env                            # Local environment variables (not committed)
+├── .env.example                    # Environment variable template
+├── netlify.toml                    # Netlify build and redirect configuration
+├── supabase_migration.sql          # Core database schema
 ├── package.json
-├── tsconfig.json           # Frontend TypeScript config
-├── tsconfig.server.json    # Backend TypeScript config
-└── vite.config.ts          # Vite build configuration
+├── tsconfig.json                   # Frontend TypeScript config
+├── tsconfig.server.json            # Backend TypeScript config
+└── vite.config.ts                  # Vite build configuration
 ```
 
 ---
@@ -148,6 +167,7 @@ prasa-smart-connect/
 - **npm** v9 or higher
 - A **Supabase** project — [supabase.com](https://supabase.com)
 - An **EmailJS** account — [emailjs.com](https://emailjs.com)
+- **Supabase CLI** — installed via `npm install -g supabase` or used via `npx supabase`
 
 ---
 
@@ -168,33 +188,18 @@ npm install
 
 ### 3. Set up environment variables
 
-Copy the example file and fill in your values:
-
 ```bash
 cp .env.example .env
 ```
 
-See the [Environment Variables](#environment-variables) section below for details on each variable.
+Fill in your values — see [Environment Variables](#environment-variables) below.
 
 ### 4. Set up the database
 
-Run the SQL in `supabase_migration.sql` inside your Supabase project:
+Run both SQL files in order inside **Supabase Dashboard → SQL Editor**:
 
-1. Go to your Supabase project dashboard
-2. Navigate to **SQL Editor**
-3. Paste the contents of `supabase_migration.sql` and click **Run**
-
-This creates the following tables:
-- `users` — registered subscribers
-- `subscriptions` — station alert subscriptions
-- `train_updates` — admin-posted train status updates
-- `tickets` — generated passenger tickets
-- `lost_found` — lost item reports
-- `safety_incidents` — safety reports from passengers
-- `coach_feedback` — crowding and sentiment submissions
-- `scraped_trains` — live train data from the scraper
-- `scraped_notices` — live service notices from the scraper
-- `station_cache` — cached station search results
+1. `supabase_migration.sql` — core tables
+2. `supabase/migrations/automation.sql` — automation tables + DB triggers
 
 ### 5. Test your connections
 
@@ -206,77 +211,193 @@ npm run test:connections
 
 ## Environment Variables
 
-Create a `.env` file in the project root with the following variables:
-
 ```env
-# Server port
+# Server
 PORT=3001
-
-# Frontend → Backend URL (used by Vite during development)
 VITE_API_URL=http://localhost:3001
 
-# Admin credentials for the /admin panel
+# Admin credentials
 ADMIN_USER=admin
 ADMIN_PASS=your-admin-password
 ADMIN_JWT_SECRET=a-long-random-secret-string
+ADMIN_EMAIL=your-admin@email.com
 
-# Supabase — get from: supabase.com → Project Settings → API
+# Security portal
+SECURITY_USER=security
+SECURITY_PASS=security2025
+
+# Supabase — Project Settings → API
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=your-service-role-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key   # same key, used by Edge Functions
 
-# EmailJS — get from: emailjs.com → Account → API Keys
+# EmailJS — emailjs.com → Account → API Keys
 EMAILJS_SERVICE_ID=service_xxxxxxx
-EMAILJS_TEMPLATE_ID=template_xxxxxxx       # General notifications / lost item confirmation
-EMAILJS_FOUND_TEMPLATE_ID=template_xxxxxxx # "Item found" notification to passenger
+EMAILJS_TEMPLATE_ID=template_xxxxxxx         # General alerts / lost item confirmation
+EMAILJS_FOUND_TEMPLATE_ID=template_xxxxxxx   # "Item found" notification to passenger
+EMAILJS_REPORT_TEMPLATE_ID=template_xxxxxxx  # Daily report email to admin
 EMAILJS_PUBLIC_KEY=your-public-key
 EMAILJS_PRIVATE_KEY=your-private-key
 
-# OpenAI — optional, chatbot falls back to rule-based if not set
-# Get from: platform.openai.com/api-keys
+# SMSPortal — optional, smsportal.com
+SMSPORTAL_CLIENT_ID=your-client-id
+SMSPORTAL_CLIENT_SECRET=your-client-secret
+
+# OpenAI — optional, falls back to rule-based chatbot
 OPENAI_API_KEY=sk-...
 
-# Hugging Face — optional, sentiment falls back to VADER if not set
-# Get from: huggingface.co/settings/tokens
+# Hugging Face — optional, sentiment falls back to VADER
 VITE_HF_API_TOKEN=hf_...
 
-# SerpAPI — optional, used for news scraping
-# Get from: serpapi.com/manage-api-key
+# SerpAPI — optional, news scraping
 SERPAPI_KEY=your-serpapi-key
+
+# Stripe — ticket payments
+STRIPE_SECRET_KEY=sk_...
+VITE_STRIPE_PUBLISHABLE_KEY=pk_...
+
+# Africa's Talking — optional SMS fallback
+AT_USERNAME=your-username
+AT_API_KEY=your-api-key
+
+# Google Maps — optional
+VITE_GOOGLE_MAPS_API_KEY=your-key
 ```
 
-> For **Netlify deployment**, add all these variables in:
+> For **Netlify deployment**, add all variables in:
 > Netlify Dashboard → Site configuration → Environment variables
 
 ---
 
 ## Running the App
 
-The app requires two processes running simultaneously in development — the Vite frontend and the Express backend.
+The app requires two processes running simultaneously in development.
 
-**Terminal 1 — Backend API server:**
-
+**Terminal 1 — Backend:**
 ```bash
 npm run server
+# Available at http://localhost:3001
 ```
 
-The API will be available at `http://localhost:3001`
-
-**Terminal 2 — Frontend dev server:**
-
+**Terminal 2 — Frontend:**
 ```bash
 npm run dev
+# Available at http://localhost:8080
 ```
-
-The app will be available at `http://localhost:8080`
 
 ### Other scripts
 
 ```bash
-npm run build          # Production build
-npm run preview        # Preview the production build locally
-npm run lint           # Run ESLint
-npm run format         # Format code with Prettier
+npm run build             # Production build
+npm run preview           # Preview production build locally
+npm run lint              # Run ESLint
+npm run format            # Format with Prettier
 npm run test:connections  # Test all external service connections
+```
+
+---
+
+## Database Setup
+
+### Core tables (`supabase_migration.sql`)
+
+| Table | Description |
+|---|---|
+| `users` | Registered subscribers |
+| `subscriptions` | Station alert subscriptions |
+| `train_updates` | Admin-posted train status updates |
+| `tickets` | Generated passenger tickets |
+| `ticket_scans` | Security officer ticket scan log |
+| `ticket_recovery_log` | Ticket recovery audit trail |
+| `lost_found` | Lost item reports |
+| `safety_incidents` | Safety reports from passengers |
+| `coach_feedback` | Crowding and sentiment submissions |
+| `scraped_trains` | Live train data from the scraper |
+| `scraped_notices` | Live service notices from the scraper |
+| `station_cache` | Cached station search results |
+| `prasa_routes` | Official PRASA route definitions |
+| `prasa_stations` | Ordered stop list per route |
+| `prasa_timetable` | Individual train stop times |
+
+### Automation tables (`supabase/migrations/automation.sql`)
+
+| Table | Description |
+|---|---|
+| `automation_logs` | Audit log for all automated events |
+| `crowding_predictions` | Materialised crowding/safety scores per line and station |
+| `daily_reports` | Daily aggregated statistics |
+
+---
+
+## Supabase Automation
+
+The platform uses a fully automated pipeline built on Supabase database triggers, Edge Functions, DB Webhooks, and pg_cron.
+
+### Database Triggers (run automatically in PostgreSQL)
+
+| Trigger | Table | Event | Action |
+|---|---|---|---|
+| `trg_recalculate_crowding` | `coach_feedback` | INSERT | Recalculates crowding and safety scores in `crowding_predictions` |
+| `trg_expire_ticket` | `tickets` | UPDATE | Auto-marks expired tickets as used |
+| `trg_log_ride_deduction` | `tickets` | UPDATE | Logs ride deductions to `automation_logs` |
+
+### Edge Functions (deployed to Supabase)
+
+| Function | Trigger | Description |
+|---|---|---|
+| `notify-alert` | DB Webhook on `train_updates` INSERT or `scraped_trains` INSERT | Sends email (EmailJS) + SMS (SMSPortal) to subscribers at the affected station |
+| `lost-found-notify` | DB Webhook on `lost_found` UPDATE where status = `matched` | Notifies passenger via email or SMS that their item was found |
+| `recalculate-crowding` | DB Webhook on `coach_feedback` INSERT | Refreshes the crowding prediction snapshot used by the chatbot |
+| `daily-report` | pg_cron at 04:00 UTC (06:00 SAST) | Aggregates daily stats, writes to `daily_reports`, emails admin |
+
+### Deploying Edge Functions
+
+```bash
+npx supabase login
+npx supabase link --project-ref your-project-ref
+npx supabase functions deploy notify-alert
+npx supabase functions deploy lost-found-notify
+npx supabase functions deploy recalculate-crowding
+npx supabase functions deploy daily-report
+```
+
+Set secrets:
+```bash
+npx supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... EMAILJS_SERVICE_ID=... # etc.
+```
+
+### DB Webhooks (configure in Supabase Dashboard → Database → Webhooks)
+
+| Webhook name | Table | Event | URL |
+|---|---|---|---|
+| `notify-alert` | `train_updates` | INSERT | `.../functions/v1/notify-alert` |
+| `notify-alert-scraper` | `scraped_trains` | INSERT | `.../functions/v1/notify-alert` |
+| `lost-found-notify` | `lost_found` | UPDATE | `.../functions/v1/lost-found-notify` |
+| `recalculate-crowding` | `coach_feedback` | INSERT | `.../functions/v1/recalculate-crowding` |
+
+Add header for each: `Authorization: Bearer <your-service-role-key>`
+
+### Realtime (enabled for live push)
+
+`automation_logs`, `crowding_predictions`, `daily_reports`, `scraped_trains`, `scraped_notices`, `train_updates`
+
+### pg_cron Daily Report
+
+Enable in Supabase SQL Editor:
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.schedule(
+  'prasa-daily-report', '0 4 * * *',
+  $$
+    select net.http_post(
+      url     := 'https://your-project.supabase.co/functions/v1/daily-report',
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer <service-role-key>'),
+      body    := '{"triggered_by":"pg_cron"}'::jsonb
+    );
+  $$
+);
 ```
 
 ---
@@ -289,14 +410,14 @@ The project is configured for **Netlify** deployment out of the box.
 
 1. Push your code to a GitHub repository
 2. Connect the repository to Netlify
-3. Netlify will auto-detect the build settings from `netlify.toml`:
+3. Netlify auto-detects settings from `netlify.toml`:
    - Build command: `npm run build`
    - Publish directory: `dist/client`
    - Functions directory: `netlify/functions`
 4. Add all environment variables in the Netlify dashboard
 5. Deploy
 
-All `/api/*` requests are automatically proxied to the Netlify serverless function via the redirect rule in `netlify.toml`.
+All `/api/*` requests are proxied to the Netlify serverless function via the redirect rule in `netlify.toml`.
 
 ---
 
@@ -317,6 +438,7 @@ All endpoints are prefixed with `/api/`.
 | GET | `/api/tickets/:userId` | Public | Get ticket history |
 | POST | `/api/chatbot` | Public | Send a chatbot message |
 | POST | `/api/sentiment` | Public | Analyse sentiment from text |
+| GET | `/api/health` | Public | Service health check |
 | POST | `/api/admin/login` | Public | Admin login |
 | GET | `/api/admin/stats` | Admin | Dashboard statistics |
 | GET | `/api/admin/lost-found` | Admin | All lost & found reports |
@@ -325,7 +447,6 @@ All endpoints are prefixed with `/api/`.
 | PATCH | `/api/admin/safety/:id` | Admin | Update safety incident status |
 | POST | `/api/admin/update` | Admin | Post a train status update + notify subscribers |
 | GET | `/api/admin/subscribers` | Admin | All registered subscribers |
-| GET | `/api/health` | Public | Service health check |
 
 ---
 
@@ -342,266 +463,13 @@ The admin panel includes:
 - **Schedules** — create, edit, and delete train schedules
 - **Alerts** — post and manage service alerts
 - **News** — publish news articles
-- **Train Update** — push live status updates with automatic subscriber email notifications
+- **Train Update** — push live status updates with automatic subscriber email + SMS notifications
 - **Subscribers** — view all registered users
 - **Safety Reports** — review and resolve safety incidents
 - **Timetable** — add upcoming trains to the database timetable
 - **Coach Feedback** — view passenger sentiment analysis by coach
-- **Lost & Found** — manage lost item reports and mark items as found (triggers email to passenger)
+- **Lost & Found** — manage lost item reports and mark items as found (triggers email/SMS to passenger)
 
 ---
 
 Built for PRASA Metrorail Western Cape commuters.
-=======
-🚆 PRASA Smart Connect
-
-A smart commuter platform designed for Passenger Rail Agency of South Africa Metrorail passengers in the Western Cape, South Africa.
-
-PRASA Smart Connect provides:
-
-Real-time train tracking
-Smart trip planning
-Service alerts
-AI-powered chatbot assistance
-Lost & Found management
-Safety incident reporting
-Ticket generation and history
-Crowd and sentiment analysis
-
-All within a single modern web application.
-
-📚 Table of Contents
-About the Project
-Features
-Tech Stack
-Project Structure
-Prerequisites
-Getting Started
-Environment Variables
-Running the Application
-Deployment
-API Overview
-Admin Dashboard
-📖 About the Project
-
-PRASA Smart Connect is a full-stack train assistance platform developed to improve the daily commuting experience for Cape Town Metrorail passengers.
-
-The system aggregates:
-
-live train schedules
-service disruptions
-station information
-passenger feedback
-AI-generated travel assistance
-
-The application also enables:
-
-automated email notifications
-lost item management
-safety reporting
-smart crowd prediction
-
-The platform is hosted on Netlify
- with a Supabase
- PostgreSQL backend and uses EmailJS
- for transactional email notifications.
-
-✨ Features
-Feature	Route	Description
-Home	/	Landing page with train network overview
-Trip Search	/search	Search trains between stations and generate tickets
-Trip Planner	/planner	Multi-route journey planning
-Live Tracking	/tracking	Simulated real-time train tracking
-Service Alerts	/alerts	Real-time train disruption updates
-Interactive Map	/map	Live station and route visualization
-News	/news	Latest PRASA-related news
-Fares	/fares	Fare and pricing information
-Crowding & Sentiment	/crowding	AI-powered crowd and safety analysis
-Lost & Found	/lost-found	Report and track lost items
-Safety Reports	/safety	Submit safety incidents
-My Tickets	/tickets	View generated ticket history
-Register	/register	Subscribe to station alerts
-Admin Dashboard	/admin	Protected admin management panel
-AI Chatbot	/chatbot	Intelligent train assistant
-🛠 Tech Stack
-Frontend
-Technology	Purpose
-React 19	Frontend framework
-TypeScript	Type safety
-Tailwind CSS	Styling
-TanStack Router	Routing
-TanStack Query	Data fetching
-Radix UI	Accessible UI components
-Leaflet + React Leaflet	Interactive maps
-Recharts	Data visualisation
-Lucide React	Icons
-Zod	Validation
-Backend
-Technology	Purpose
-Express.js	REST API
-Node.js	Backend runtime
-TypeScript	Server-side type safety
-node-cron	Scheduled scraping
-Axios + Cheerio	Train data scraping
-serverless-http	Netlify serverless support
-Database & Integrations
-Service	Purpose
-Supabase
-	PostgreSQL database
-EmailJS
-	Email notifications
-Hugging Face
-	Sentiment analysis
-OpenAI API
-	AI chatbot
-SerpAPI
-	News scraping
-📂 Project Structure
-prasa-smart-connect/
-├── netlify/
-├── server/
-├── src/
-├── .env
-├── package.json
-├── vite.config.ts
-└── supabase_migration.sql
-Main Backend Modules
-chatbot.ts → AI chatbot
-scraper.ts → CTTrains scraper
-lostFound.ts → Lost & Found APIs
-sentiment.ts → AI sentiment analysis
-tickets.ts → Ticket generation
-stationSearch.ts → Station search and maps
-⚙️ Prerequisites
-
-Before running the project, ensure you have:
-
-Node.js v20+
-npm v9+
-A Supabase
- project
-An EmailJS
- account
-🚀 Getting Started
-1. Clone the Repository
-git clone https://github.com/your-username/prasa-smart-connect.git
-cd prasa-smart-connect
-2. Install Dependencies
-npm install
-3. Configure Environment Variables
-cp .env.example .env
-
-Add your API keys and configuration values.
-
-4. Configure the Database
-
-Run the supabase_migration.sql script inside your Supabase SQL Editor.
-
-This creates tables for:
-
-users
-subscriptions
-train updates
-tickets
-lost items
-safety reports
-sentiment analysis
-scraped train data
-5. Test External Services
-npm run test:connections
-🔐 Environment Variables
-PORT=3001
-VITE_API_URL=http://localhost:3001
-
-SUPABASE_URL=
-SUPABASE_SERVICE_KEY=
-
-EMAILJS_SERVICE_ID=
-EMAILJS_TEMPLATE_ID=
-EMAILJS_PUBLIC_KEY=
-EMAILJS_PRIVATE_KEY=
-
-OPENAI_API_KEY=
-VITE_HF_API_TOKEN=
-SERPAPI_KEY=
-
-For deployment, add these variables in the Netlify dashboard.
-
-▶️ Running the Application
-Backend
-npm run server
-
-Runs at:
-
-http://localhost:3001
-Frontend
-npm run dev
-
-Runs at:
-
-http://localhost:8080
-📦 Deployment
-
-The project is configured for deployment on Netlify
-.
-
-Deployment Steps
-Push the project to GitHub
-Connect repository to Netlify
-Configure environment variables
-Deploy
-
-The backend runs using Netlify Functions.
-
-🔌 API Overview
-Method	Endpoint	Description
-GET	/api/schedules	Retrieve train schedules
-GET	/api/alerts	Retrieve service alerts
-POST	/api/register	Register a user
-POST	/api/subscribe	Subscribe to alerts
-POST	/api/chatbot	AI chatbot endpoint
-POST	/api/lost-found	Report lost items
-POST	/api/safety	Submit safety reports
-POST	/api/tickets	Generate tickets
-POST	/api/sentiment	Analyse sentiment
-POST	/api/admin/update	Push train updates
-🛡 Admin Dashboard
-
-Access:
-
-/admin/login
-
-The dashboard allows administrators to:
-
-manage schedules
-post alerts
-review safety reports
-manage lost items
-notify passengers
-publish news
-monitor sentiment analysis
-manage subscribers
-🤖 AI Features
-
-The platform includes:
-
-AI chatbot assistance
-Crowd prediction
-Safety analysis
-Smart route recommendations
-Sentiment analysis using:
-Hugging Face
-VADER
-🌍 Vision
-
-PRASA Smart Connect aims to modernize commuter rail experiences in South Africa by combining:
-
-real-time transport data
-AI-driven assistance
-automation
-modern web technologies
-
-into one intelligent commuter platform.
-
-Built for Cape Town Metrorail commuters.
->>>>>>> e72859b9c4146689b5355fd59884fdfa46b4df38

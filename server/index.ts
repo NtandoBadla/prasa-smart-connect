@@ -7,6 +7,7 @@ import { supabase } from "./db";
 import { runScrape } from "./scraper";
 import { sendEmail } from "./mailer";
 import { requireAuth } from "./middleware/auth";
+import { startAutomation } from "./automation";
 
 const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
@@ -418,6 +419,31 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
+// ── Admin: automation logs ────────────────────────────────────────────────────
+app.get("/api/admin/automation-logs", requireAuth, async (req, res) => {
+  const { event_type, status, limit = "100" } = req.query as Record<string, string>;
+  let query = supabase.from("automation_logs").select("*").order("created_at", { ascending: false }).limit(Number(limit));
+  if (event_type) query = query.eq("event_type", event_type);
+  if (status)     query = query.eq("status", status);
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+// ── Admin: daily reports ──────────────────────────────────────────────────────
+app.get("/api/admin/daily-reports", requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("daily_reports").select("*").order("report_date", { ascending: false }).limit(30);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+// ── Admin: crowding predictions (chatbot knowledge base) ──────────────────────
+app.get("/api/admin/crowding-predictions", requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("crowding_predictions").select("*").order("last_calculated", { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
 const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () => {
   console.log(`PRASA API running on http://localhost:${PORT}`);
@@ -429,4 +455,5 @@ app.listen(PORT, () => {
       .then(({ trains, notices }) => console.log(`[cron] Scraped: ${trains.length} trains, ${notices.length} notices`))
       .catch((err) => console.error("[cron] Scrape failed:", err.message));
   });
+  startAutomation();
 });
