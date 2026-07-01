@@ -519,4 +519,55 @@ export const api = {
   }[]) => apiFetch<{ inserted: number }>(`/timetable/admin/bulk-stops`, {
     method: "POST", body: JSON.stringify({ route_id: routeId, stops }),
   }),
+
+  // ── Security Portal ────────────────────────────────────────────────────────
+  securityLogin: (username: string, password: string) =>
+    apiFetch<{ token: string }>("/security/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+
+  securityScan: (qrToken: string, stationName?: string, officerId?: string) => {
+    const secToken = localStorage.getItem("security_token") ?? "";
+    return fetch(`${BASE}/security/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-security-token": secToken },
+      body: JSON.stringify({ qrToken, stationName, officerId }),
+    }).then((r) => r.json()) as Promise<{
+      valid: boolean;
+      reason: string;
+      message: string;
+      rides_remaining?: number | null;
+      used_at?: string;
+      blacklist_reason?: string;
+      ticket?: {
+        id: string; ticket_ref: string; passenger_name: string | null;
+        train_no: string; line: string; from_station: string; to_station: string;
+        departure: string; arrival: string | null; fare: number; travel_class: string;
+        payment_status: string; used: boolean; used_at: string | null;
+        booked_at: string; expires_at: string | null; rides_remaining: number | null;
+        blacklisted: boolean; blacklist_reason: string | null;
+      };
+    }>;
+  },
+
+  securityDashboard: () => {
+    const secToken = localStorage.getItem("security_token") ?? "";
+    return fetch(`${BASE}/security/dashboard`, {
+      headers: { "x-security-token": secToken, "Content-Type": "application/json" },
+    }).then((r) => r.json()) as Promise<{
+      total: number; valid: number; expired: number;
+      blacklisted: number; used: number; no_rides: number; not_found: number;
+    }>;
+  },
+
+  securityScanHistory: () => {
+    const secToken = localStorage.getItem("security_token") ?? "";
+    return fetch(`${BASE}/security/scan-history`, {
+      headers: { "x-security-token": secToken, "Content-Type": "application/json" },
+    }).then((r) => r.json()) as Promise<{
+      id: string; ticket_id: string | null; security_officer_id: string | null;
+      station_name: string | null; scan_time: string; validation_result: string;
+    }[]>;
+  },
 };

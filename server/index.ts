@@ -8,6 +8,7 @@ import { runScrape } from "./scraper";
 import { sendEmail } from "./mailer";
 import { requireAuth } from "./middleware/auth";
 import { runAutoNotify } from "./autoNotify";
+import { startAutomation } from "./automation";
 
 const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
@@ -25,6 +26,7 @@ import lostFoundRouter from "./routes/lostFound";
 import safetyRouter from "./routes/safety";
 import stationSearchRouter from "./routes/stationSearch";
 import timetableRouter from "./routes/timetable";
+import securityRouter from "./routes/security";
 
 import { SCHEDULES as SEED_SCHEDULES, ALERTS as SEED_ALERTS } from "../src/data/prasa";
 import type { TrainSchedule, ServiceAlert } from "../src/data/prasa";
@@ -180,6 +182,7 @@ app.use("/api/lost-found",   lostFoundRouter);
 app.use("/api/safety",       safetyRouter);
 app.use("/api/stations",     stationSearchRouter);
 app.use("/api/timetable",    timetableRouter);
+app.use("/api/security",     securityRouter);
 
 app.get("/api/live-trains", async (_req, res) => {
   const { trains } = await runScrape().catch(() => ({ trains: [] }));
@@ -417,6 +420,32 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
+// ── Admin: automation logs ────────────────────────────────────────────────────
+app.get("/api/admin/automation-logs", requireAuth, async (req, res) => {
+  const { event_type, status, limit = "100" } = req.query as Record<string, string>;
+  let query = supabase.from("automation_logs").select("*").order("created_at", { ascending: false }).limit(Number(limit));
+  if (event_type) query = query.eq("event_type", event_type);
+  if (status)     query = query.eq("status", status);
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+// ── Admin: daily reports ──────────────────────────────────────────────────────
+app.get("/api/admin/daily-reports", requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("daily_reports").select("*").order("report_date", { ascending: false }).limit(30);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+// ── Admin: crowding predictions (chatbot knowledge base) ──────────────────────
+app.get("/api/admin/crowding-predictions", requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("crowding_predictions").select("*").order("last_calculated", { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+// ── Scrape + auto-notify (runs on startup and every 10 min via startAutomation) ─
 async function scrapeAndNotify() {
   const { trains, notices } = await runScrape();
   console.log(`[cron] Scraped: ${trains.length} trains, ${notices.length} notices`);
@@ -429,10 +458,8 @@ async function scrapeAndNotify() {
 const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () => {
   console.log(`PRASA API running on http://localhost:${PORT}`);
-  // Run once on startup
+  // Initial scrape + notify on startup
   scrapeAndNotify().catch(console.error);
-  // Then every 10 minutes
-  cron.schedule("*/10 * * * *", () => {
-    scrapeAndNotify().catch((err) => console.error("[cron] Scrape/notify failed:", err.message));
-  });
+  // Start all background automation jobs (ticket expiry, daily report, etc.)
+  startAutomation();
 });

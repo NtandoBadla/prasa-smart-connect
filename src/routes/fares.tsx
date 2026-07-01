@@ -131,7 +131,7 @@ function FaresPage() {
         const t = await api.generateTicket({
           trainNo: bookingTrain.trainNo, line: bookingTrain.line,
           from, to, departure: bookingTrain.departure, arrival: bookingTrain.arrival,
-          fare: total, travelClass: cls,
+          fare: total, travelClass: `${TICKET_TYPES.find((t) => t.id === ticket)?.label} ${cls}`,
           passengerName: passengerForm.name || undefined,
           idNumber: passengerForm.idNumber || undefined,
           email: passengerForm.email || undefined,
@@ -151,7 +151,7 @@ function FaresPage() {
                 const { clientSecret: cs } = await api.createPaymentIntent({
         trainNo: bookingTrain.trainNo, line: bookingTrain.line,
         from, to, departure: bookingTrain.departure, arrival: bookingTrain.arrival,
-        fare: total, travelClass: cls,
+        fare: total, travelClass: `${TICKET_TYPES.find((t) => t.id === ticket)?.label} ${cls}`,
         passengerName: passengerForm.name || undefined,
         idNumber: passengerForm.idNumber || undefined,
         email: passengerForm.email || undefined,

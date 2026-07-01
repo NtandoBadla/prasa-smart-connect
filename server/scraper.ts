@@ -83,16 +83,32 @@ function extractTrainMessage(
   const trainNoMatch = msg.match(/\bT(\d{3,5})\b/i);
   const trainNo = trainNoMatch ? trainNoMatch[0].toUpperCase() : "LIVE";
 
-  const fromMatch = msg.match(/departed?\s+([A-Za-z ']+?)\s+station/i)
-                 ?? msg.match(/from\s+([A-Za-z ']+?)\s+(?:to|station)/i);
-  const toMatch   = msg.match(/en[- ]?route\s+to\s+([A-Za-z ']+?)\s*(?:station|$)/i)
-                 ?? msg.match(/to\s+([A-Za-z ']+?)(?:\s+station|[.,]|$)/i);
+  // Match multi-word station names (e.g. "Du Toit", "Simon's Town", "Fish Hoek")
+  const fromMatch = msg.match(/departed?\s+([A-Za-z '']+?)\s+station/i)
+                 ?? msg.match(/from\s+([A-Za-z '']{3,}(?:\s+[A-Za-z '']+)?)\s+(?:to\b|station)/i);
+  const toMatch   = msg.match(/en[- ]?route\s+to\s+([A-Za-z '']{3,}(?:\s+[A-Za-z '']+)?)\s*(?:station|[,(]|$)/i)
+                 ?? msg.match(/\bto\s+([A-Za-z '']{3,}(?:\s+[A-Za-z '']+)?)(?:\s+station|[.,)]|$)/i);
 
   const mentionedStations = KNOWN_STATIONS.filter((s) =>
     msg.toLowerCase().includes(s.toLowerCase())
   );
 
-  const fromStation = fromMatch
+  // Resolve a raw matched string to the nearest canonical station name
+  function resolveStation(raw: string): string {
+    const r = raw.trim();
+    // Exact match first
+    const exact = KNOWN_STATIONS.find((s) => s.toLowerCase() === r.toLowerCase());
+    if (exact) return exact;
+    // Starts-with match — handles truncated names like "Du" → "Du Toit"
+    const starts = KNOWN_STATIONS.find((s) => s.toLowerCase().startsWith(r.toLowerCase()));
+    if (starts) return starts;
+    // Contains match
+    const contains = KNOWN_STATIONS.find((s) => s.toLowerCase().includes(r.toLowerCase()));
+    if (contains) return contains;
+    return r;
+  }
+
+  const rawFrom = fromMatch
     ? fromMatch[1].trim()
     : mentionedStations.length >= 2
       ? mentionedStations[0]
@@ -100,11 +116,14 @@ function extractTrainMessage(
         ? resolvedLine.replace(" Line", "")
         : (mentionedStations[0] ?? "Unknown");
 
-  const toStation = toMatch
+  const rawTo = toMatch
     ? toMatch[1].trim()
     : mentionedStations.length >= 2
       ? mentionedStations[mentionedStations.length - 1]
       : "Cape Town";
+
+  const fromStation = resolveStation(rawFrom);
+  const toStation   = resolveStation(rawTo);
 
   return {
     notice: {

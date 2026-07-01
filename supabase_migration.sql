@@ -225,3 +225,23 @@ create index if not exists idx_prasa_timetable_station on prasa_timetable(statio
 create index if not exists idx_prasa_timetable_depart  on prasa_timetable(departure);
 
 -- unique constraint is defined inline on the table above (see prasa_timetable)
+
+-- ── Ticket Scans (Security Officer scan log) ──────────────────────────────────
+create table if not exists ticket_scans (
+  id                   uuid primary key default gen_random_uuid(),
+  ticket_id            uuid references tickets(id) on delete set null,
+  security_officer_id  uuid,
+  station_name         text,
+  scan_time            timestamptz default now(),
+  validation_result    text not null  -- 'valid' | 'expired' | 'used' | 'blacklisted' | 'no_rides' | 'not_found' | 'unpaid'
+);
+
+create index if not exists idx_ticket_scans_ticket_id  on ticket_scans (ticket_id);
+create index if not exists idx_ticket_scans_scan_time  on ticket_scans (scan_time desc);
+create index if not exists idx_ticket_scans_result     on ticket_scans (validation_result);
+
+-- Add blacklist + multi-ride + expiry columns to tickets (safe on existing DBs)
+alter table tickets add column if not exists blacklisted       boolean default false;
+alter table tickets add column if not exists blacklist_reason  text;
+alter table tickets add column if not exists rides_remaining   integer;
+alter table tickets add column if not exists expires_at        timestamptz;

@@ -52,8 +52,8 @@
 
               <p style="margin:0 0 8px;color:#374151;font-size:15px;">Hi there,</p>
               <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
-                There is a service update for a train at your subscribed station.
-                Here are the full details:
+                There is a service disruption on the <strong>{{line}}</strong> affecting your subscribed station
+                <strong>{{station}}</strong>. Here are the full details:
               </p>
 
               <!-- Detail card -->
@@ -111,15 +111,37 @@
                       </tr>
 
                       <tr>
-                        <td style="color:#6b7280;font-size:13px;padding:7px 0;">
+                        <td style="color:#6b7280;font-size:13px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
                           &#128336; Updated at
                         </td>
-                        <td style="color:#374151;font-size:14px;padding:7px 0;">
+                        <td style="color:#374151;font-size:14px;padding:7px 0;border-bottom:1px solid #e2e8f0;">
                           {{updated_at}}
                         </td>
                       </tr>
 
+                      <tr>
+                        <td style="color:#6b7280;font-size:13px;padding:7px 0;" colspan="2">
+                          &#128205; Affected Stations
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="color:#374151;font-size:13px;padding:4px 0 12px;line-height:1.7;">
+                          {{affected_stations}}
+                        </td>
+                      </tr>
+
                     </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Other disruptions on this line -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;margin-bottom:20px;">
+                <tr>
+                  <td style="padding:14px 18px;">
+                    <p style="margin:0 0 6px;color:#92400e;font-size:13px;font-weight:700;">&#9888; Other disruptions on the {{line}}:</p>
+                    <p style="margin:0;color:#78350f;font-size:13px;line-height:1.8;white-space:pre-line;">{{line_context}}</p>
                   </td>
                 </tr>
               </table>
