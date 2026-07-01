@@ -7,6 +7,7 @@ import { supabase } from "./db";
 import { runScrape } from "./scraper";
 import { sendEmail } from "./mailer";
 import { requireAuth } from "./middleware/auth";
+import { runAutoNotify } from "./autoNotify";
 
 const isSupabaseConfigured = () =>
   !!process.env.SUPABASE_URL &&
@@ -416,15 +417,22 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
+async function scrapeAndNotify() {
+  const { trains, notices } = await runScrape();
+  console.log(`[cron] Scraped: ${trains.length} trains, ${notices.length} notices`);
+  const { notified, failed } = await runAutoNotify(trains, notices);
+  if (notified > 0 || failed > 0) {
+    console.log(`[autoNotify] Sent ${notified} notification(s), ${failed} failed.`);
+  }
+}
+
 const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () => {
   console.log(`PRASA API running on http://localhost:${PORT}`);
-  runScrape().then(({ trains, notices }) =>
-    console.log(`[cron] Initial scrape: ${trains.length} trains, ${notices.length} notices`)
-  ).catch(console.error);
+  // Run once on startup
+  scrapeAndNotify().catch(console.error);
+  // Then every 10 minutes
   cron.schedule("*/10 * * * *", () => {
-    runScrape()
-      .then(({ trains, notices }) => console.log(`[cron] Scraped: ${trains.length} trains, ${notices.length} notices`))
-      .catch((err) => console.error("[cron] Scrape failed:", err.message));
+    scrapeAndNotify().catch((err) => console.error("[cron] Scrape/notify failed:", err.message));
   });
 });

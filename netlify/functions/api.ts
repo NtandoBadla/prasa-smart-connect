@@ -4,6 +4,8 @@ import cors from "cors";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { supabase } from "../../server/db";
 import { sendEmail } from "../../server/mailer";
+import { runScrape } from "../../server/scraper";
+import { runAutoNotify } from "../../server/autoNotify";
 
 const isSupabaseConfigured =
   !!process.env.SUPABASE_URL &&
@@ -519,6 +521,40 @@ app.get(["/api/announcements", "/announcements"], async (_req, res) => {
     supabase.from("train_updates").select("*").order("updated_at", { ascending: false }).limit(20),
   ]);
   res.json({ notices: noticesRes.data ?? [], adminUpdates: updatesRes.data ?? [] });
+});
+
+// ── Auto-notify (triggered by Netlify Scheduled Function or external cron) ────
+// Protected by a shared secret: NOTIFY_SECRET env var.
+// Call: POST /api/auto-notify  with header  x-notify-secret: <NOTIFY_SECRET>
+app.post(["/api/auto-notify", "/auto-notify"], async (req, res) => {
+  const secret = process.env.NOTIFY_SECRET;
+  const provided = req.headers["x-notify-secret"] as string | undefined;
+
+  if (!secret || !provided || provided !== secret) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (!isSupabaseConfigured) {
+    res.status(503).json({ error: "Supabase not configured" });
+    return;
+  }
+
+  try {
+    const { trains, notices } = await runScrape();
+    const { notified, failed } = await runAutoNotify(trains, notices);
+    console.log(`[auto-notify] trains=${trains.length} notified=${notified} failed=${failed}`);
+    res.json({
+      ok: true,
+      trains: trains.length,
+      actionable: trains.filter((t) => t.status === "Delayed" || t.status === "Cancelled").length,
+      notified,
+      failed,
+    });
+  } catch (err: any) {
+    console.error("[auto-notify] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────

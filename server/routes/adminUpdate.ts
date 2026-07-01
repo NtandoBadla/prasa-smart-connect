@@ -49,17 +49,32 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  // Query users whose registered station exactly matches the selected station
-  const { data: users, error: usersErr } = await supabase
-    .from("users")
-    .select("email, phone")
-    .eq("station", station);
+  // Query users from BOTH sources:
+  // 1. users whose home station matches
+  // 2. users who subscribed to this station via the subscriptions table
+  const [usersRes, subsRes] = await Promise.all([
+    supabase.from("users").select("email, phone").eq("station", station),
+    supabase
+      .from("subscriptions")
+      .select("station, user_id, users!inner(email, phone)")
+      .eq("station", station),
+  ]);
 
-  if (usersErr) {
-    console.error("Users fetch error:", usersErr.message);
+  if (usersRes.error) console.error("Users fetch error:", usersRes.error.message);
+  if (subsRes.error) console.error("Subscriptions fetch error:", subsRes.error.message);
+
+  // Deduplicate by email
+  const emailMap = new Map<string, { email: string; phone?: string }>();
+  for (const u of usersRes.data ?? []) {
+    if (u.email) emailMap.set(u.email.toLowerCase(), { email: u.email, phone: u.phone ?? undefined });
   }
-
-  const subscribers = (users ?? []).filter((u: any) => !!u.email) as { email: string; phone?: string }[];
+  for (const sub of subsRes.data ?? []) {
+    const user = (sub as any).users as { email: string; phone?: string } | null;
+    if (user?.email && !emailMap.has(user.email.toLowerCase())) {
+      emailMap.set(user.email.toLowerCase(), { email: user.email, phone: user.phone ?? undefined });
+    }
+  }
+  const subscribers = Array.from(emailMap.values()).filter((u) => !!u.email) as { email: string; phone?: string }[];
 
   console.log(`[adminUpdate] station="${station}" matched_users=${subscribers.length}`);
 
