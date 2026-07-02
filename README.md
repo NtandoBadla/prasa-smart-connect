@@ -4,7 +4,7 @@
 
 ### AI-Powered Smart Commuter Platform for South African Rail Transport
 
-![PRASA Smart Connect](docs/images/homepage.png)
+![PRASA Smart Connect](public/Screenshot_2-7-2026_81824_prasa-smart-connect.netlify.app.jpeg)
 
 **Modernising railway transportation through Artificial Intelligence, Real-Time Tracking, Digital Ticketing and Automation.**
 
@@ -31,9 +31,8 @@ The project was developed as part of a real-world digital transformation initiat
 
 # 🖼️ System Preview
 
-> Replace the image below with your uploaded screenshot.
 
-![Homepage](docs/images/homepage.png)
+![Homepage](public/Screenshot_2-7-2026_81824_prasa-smart-connect.netlify.app.jpeg)
 
 ---
 
