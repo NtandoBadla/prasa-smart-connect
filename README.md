@@ -1,549 +1,353 @@
+<div align="center">
+
 # 🚆 PRASA Smart Connect
 
-## Intelligent Rail Passenger Management & Safety Platform
+### AI-Powered Smart Commuter Platform for South African Rail Transport
 
-PRASA Smart Connect is a modern digital commuter platform designed to improve the travel experience, passenger safety, and operational efficiency of PRASA Metrorail services in the Western Cape, South Africa.
+![PRASA Smart Connect](docs/images/homepage.png)
 
-The platform centralizes train information, journey planning, digital ticketing, safety reporting, lost and found services, crowd monitoring, and AI-powered customer assistance into a single intelligent ecosystem.
+**Modernising railway transportation through Artificial Intelligence, Real-Time Tracking, Digital Ticketing and Automation.**
 
-Built using React, TypeScript, Supabase, and modern cloud technologies, the system provides real-time communication between commuters, security personnel, and administrators while supporting automation, data-driven decision-making, and enhanced service delivery.
+![React](https://img.shields.io/badge/React-19-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green)
+![Express](https://img.shields.io/badge/Express.js-Backend-black)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-38B2AC)
+![License](https://img.shields.io/badge/License-MIT-success)
 
----
-
-# Table of Contents
-
-* Overview
-* Problem Statement
-* Objectives
-* Key Features
-* System Architecture
-* Technology Stack
-* Project Structure
-* Installation Guide
-* Environment Variables
-* Database Architecture
-* Automation & Workflows
-* AI Chatbot
-* Security & Ticket Validation
-* API Documentation
-* Admin Portal
-* Deployment
-* Future Enhancements
-* Contributors
-* License
+</div>
 
 ---
 
-# Overview
+# 📖 Overview
 
-PRASA Smart Connect was developed to modernize commuter rail services by providing passengers with real-time information, intelligent support, and digital tools that improve convenience, safety, and communication.
+PRASA Smart Connect is an intelligent railway passenger management platform designed to improve the commuting experience for South African passengers.
 
-The platform enables passengers to:
+The system provides passengers with real-time train information, digital ticketing, automated notifications, live service alerts, AI-powered assistance, crowding predictions, and enhanced safety features through one modern web platform.
 
-* View train schedules
-* Track train movements
-* Receive service alerts
-* Report safety incidents
-* Report lost items
-* Purchase and manage digital tickets
-* Receive email and SMS notifications
-* Interact with an AI-powered chatbot
-
-Administrators can monitor system activity, manage incidents, publish updates, and communicate with passengers in real time.
+The project was developed as part of a real-world digital transformation initiative, demonstrating how modern technologies can improve railway operations and passenger communication.
 
 ---
 
-# Problem Statement
+# 🖼️ System Preview
 
-Rail commuters often face several challenges:
+> Replace the image below with your uploaded screenshot.
 
-* Limited access to real-time train information
-* Delayed communication during service disruptions
-* Difficulty reporting incidents or lost items
-* Lack of digital ticket management
-* Limited visibility into crowding levels
-* Poor passenger engagement channels
-
-PRASA Smart Connect addresses these challenges through a centralized digital platform that improves communication, safety, and operational visibility.
+![Homepage](docs/images/homepage.png)
 
 ---
 
-# Objectives
+# 🎯 Objectives
 
-The primary objectives of the project are:
+The project aims to:
 
-* Improve commuter experience
-* Increase passenger safety
-* Modernize ticket management
-* Provide real-time service updates
-* Enhance communication between passengers and PRASA
-* Automate operational workflows
-* Enable data-driven decision-making
-
----
-
-# Key Features
-
-## Passenger Features
-
-### Train Search
-
-Search trains between stations and view available routes.
-
-### Trip Planner
-
-Plan journeys with transfer recommendations and route optimization.
-
-### Live Train Tracking
-
-View train locations and operational status in real time.
-
-### Service Alerts
-
-Receive updates regarding:
-
-* Delays
-* Cancellations
-* Route disruptions
-* Maintenance activities
-
-### Digital Tickets
-
-Generate and manage:
-
-* Single journey tickets
-* Return tickets
-* Multi-ride tickets
-
-### Lost & Found
-
-Passengers can:
-
-* Report lost items
-* Track report status
-* Receive notifications when items are recovered
-
-### Safety Reporting
-
-Passengers can report:
-
-* Security incidents
-* Suspicious activities
-* Infrastructure issues
-* Emergencies
-
-### AI Chatbot
-
-Provides assistance for:
-
-* Timetables
-* Routes
-* Train information
-* Ticket information
-* Station information
-* Service updates
-
-### Crowding Predictor
-
-Uses passenger feedback and sentiment analysis to estimate:
-
-* Crowd density
-* Passenger comfort
-* Safety levels
-
-### Interactive Map
-
-Displays:
-
-* Stations
-* Routes
-* Train lines
-* Service coverage
+- Improve passenger communication
+- Reduce uncertainty caused by train delays
+- Digitise ticket management
+- Improve passenger safety
+- Provide real-time railway information
+- Automate operational processes
+- Support PRASA's digital transformation
 
 ---
 
-# System Architecture
+# ✨ Key Features
 
-```text
-Passengers
-      │
-      ▼
-React + TypeScript Frontend
-      │
-      ▼
-Express REST API
-      │
-      ▼
-Supabase PostgreSQL Database
-      │
- ┌────┼────┐
- ▼    ▼    ▼
-Chatbot Alerts Tickets
- │    │      │
- ▼    ▼      ▼
-EmailJS SMSPortal Realtime
-      │
-      ▼
-Passengers
-```
+## 🚆 Live Train Updates
+
+- Live train status
+- Delay notifications
+- Cancellation alerts
+- Service notices
+- Platform information
 
 ---
 
-# Technology Stack
+## 🎫 Digital Ticketing
 
-## Frontend
-
-* React 19
-* TypeScript
-* TanStack Router
-* TanStack Query
-* Tailwind CSS
-* Radix UI
-* Recharts
-* React Leaflet
-* Lucide React
-
-## Backend
-
-* Express.js
-* TypeScript
-* Axios
-* Cheerio
-* Node Cron
-* Serverless HTTP
-
-## Database
-
-* Supabase PostgreSQL
-* Supabase Realtime
-* Supabase Edge Functions
-
-## AI & Analytics
-
-* OpenAI API
-* Hugging Face
-* VADER Sentiment Analysis
-
-## Communication
-
-* EmailJS
-* SMSPortal
-
-## Payments
-
-* Stripe
-
-## Deployment
-
-* Netlify
-* Vite
+- QR Code tickets
+- Ticket validation
+- Ride tracking
+- Ticket expiry management
+- Multi-ride ticket support
 
 ---
 
-# Project Structure
-
-```text
-prasa-smart-connect/
-
-├── src/
-│   ├── components/
-│   ├── routes/
-│   ├── hooks/
-│   ├── data/
-│   └── lib/
-│
-├── server/
-│   ├── routes/
-│   ├── middleware/
-│   ├── scraper/
-│   ├── db/
-│   └── automation/
-│
-├── supabase/
-│   ├── migrations/
-│   └── functions/
-│
-├── netlify/
-│   └── functions/
-│
-└── scripts/
-```
-
----
-
-# Installation Guide
-
-## Clone Repository
-
-```bash
-git clone https://github.com/yourusername/prasa-smart-connect.git
-cd prasa-smart-connect
-```
-
-## Install Dependencies
-
-```bash
-npm install
-```
-
-## Configure Environment Variables
-
-```bash
-cp .env.example .env
-```
-
-## Run Database Migrations
-
-Execute:
-
-```sql
-supabase_migration.sql
-```
-
-and
-
-```sql
-automation.sql
-```
-
-inside Supabase SQL Editor.
-
----
-
-# Environment Variables
-
-```env
-PORT=3001
-
-VITE_API_URL=http://localhost:3001
-
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-
-EMAILJS_SERVICE_ID=
-EMAILJS_TEMPLATE_ID=
-EMAILJS_FOUND_TEMPLATE_ID=
-EMAILJS_PUBLIC_KEY=
-EMAILJS_PRIVATE_KEY=
-
-SMSPORTAL_CLIENT_ID=
-SMSPORTAL_CLIENT_SECRET=
-
-OPENAI_API_KEY=
-
-VITE_HF_API_TOKEN=
-
-STRIPE_SECRET_KEY=
-VITE_STRIPE_PUBLISHABLE_KEY=
-```
-
----
-
-# Database Architecture
-
-## Core Tables
-
-| Table            | Purpose                |
-| ---------------- | ---------------------- |
-| users            | Registered users       |
-| subscriptions    | Alert subscriptions    |
-| tickets          | Digital tickets        |
-| ticket_scans     | Ticket validation logs |
-| lost_found       | Lost item reports      |
-| safety_incidents | Passenger reports      |
-| coach_feedback   | Crowding feedback      |
-| train_updates    | Admin updates          |
-| scraped_trains   | Live train information |
-| scraped_notices  | Service notices        |
-| prasa_routes     | Route definitions      |
-| prasa_stations   | Station definitions    |
-| prasa_timetable  | Train timetable data   |
-
----
-
-# Automation & Workflows
-
-The system uses automation to reduce manual work.
-
-## Automated Alerts
-
-When train delays or disruptions are detected:
-
-1. Data is scraped
-2. Supabase stores updates
-3. Webhooks trigger Edge Functions
-4. Notifications are sent
-
-## Lost & Found Automation
-
-When an item is marked as found:
-
-1. Admin updates status
-2. Trigger executes
-3. Email notification sent
-4. SMS notification sent
-
-## Ticket Expiry Automation
-
-Expired tickets are automatically updated.
-
-## Daily Reports
-
-Automated reports provide:
-
-* Tickets sold
-* Tickets scanned
-* Safety incidents
-* Delays
-* Lost & found statistics
-* Crowding trends
-
----
-
-# AI Chatbot
-
-The chatbot provides intelligent responses based on:
-
-* Timetable data
-* Route information
-* Service alerts
-* Station information
-* Lost & Found procedures
-* Ticket information
-
-The chatbot can operate using:
-
-* Rule-based responses
-* OpenAI-powered responses
-* Supabase knowledge base
-
----
-
-# Security & Ticket Validation
-
-## Digital Ticket Validation
-
-Each ticket contains a unique QR Code.
+## 🛡️ Security Portal
 
 Security personnel can:
 
-* Scan tickets
-* Verify authenticity
-* Check expiry dates
-* View remaining rides
-* Detect duplicate usage
-
-## Security Portal
-
-Security officers have access to:
-
-* Ticket scanner
-* Validation dashboard
-* Incident reports
-* Passenger verification tools
-
-## Safety Features
-
-* Emergency reporting
-* SOS functionality
-* Security incident logging
-* Location-based alerts
+- Scan QR tickets
+- Verify ticket authenticity
+- View remaining rides
+- Check expiry dates
+- Detect invalid or expired tickets
+- Validate passenger journeys
 
 ---
 
-# API Documentation
+## 🤖 AI Assistant
 
-Base URL
+Passengers can ask questions about:
 
-```text
-/api
-```
-
-## Public Endpoints
-
-| Method | Endpoint        |
-| ------ | --------------- |
-| GET    | /api/schedules  |
-| GET    | /api/alerts     |
-| GET    | /api/news       |
-| POST   | /api/register   |
-| POST   | /api/subscribe  |
-| POST   | /api/lost-found |
-| POST   | /api/safety     |
-| POST   | /api/tickets    |
-| POST   | /api/chatbot    |
-
-## Admin Endpoints
-
-| Method | Endpoint               |
-| ------ | ---------------------- |
-| POST   | /api/admin/login       |
-| GET    | /api/admin/stats       |
-| GET    | /api/admin/subscribers |
-| GET    | /api/admin/lost-found  |
-| GET    | /api/admin/safety      |
-| POST   | /api/admin/update      |
+- Train schedules
+- Routes
+- Stations
+- Ticket information
+- Service updates
+- Lost property
+- Safety information
 
 ---
 
-# Admin Portal
+## 📊 Crowding Predictor
+
+The platform analyses passenger feedback to estimate:
+
+- Train occupancy
+- Crowding levels
+- Safety score
+- Passenger sentiment
+
+---
+
+## 📍 Route Search
+
+Passengers can search:
+
+- Departure station
+- Destination
+- Available routes
+- Estimated arrival times
+- Journey duration
+
+---
+
+## 🗺️ Live Train Tracking
+
+Displays:
+
+- Active trains
+- Current train position
+- Station progress
+- Service status
+
+---
+
+## 🔔 Notifications
+
+Passengers automatically receive:
+
+- Email notifications
+- SMS notifications
+- Delay alerts
+- Cancellation alerts
+- Service notices
+- Lost & Found notifications
+
+---
+
+## 👜 Lost & Found
+
+Passengers can:
+
+- Report lost items
+- Track reports
+- Receive automatic notifications
+- View recovered items
+
+---
+
+## 📈 Admin Dashboard
 
 Administrators can manage:
 
-* Train schedules
-* Service alerts
-* Passenger reports
-* Lost & Found requests
-* Subscriber management
-* News publishing
-* Ticket monitoring
-* Crowding analytics
+- Train schedules
+- Users
+- Tickets
+- Passenger reports
+- Lost property
+- Analytics
+- Notifications
+- Daily reports
 
 ---
 
-# Deployment
+# ⚙️ Automation
 
-## Netlify
+The platform automates several important railway operations.
 
-```bash
-npm run build
+### Every 10 Minutes
+
+- Scrapes live train updates
+- Updates train status
+- Updates service notices
+
+### Automatically
+
+- Sends delay notifications
+- Sends cancellation alerts
+- Updates crowding predictions
+- Generates daily reports
+- Monitors ticket expiry
+- Logs every automated event
+- Refreshes live train data
+
+This significantly reduces manual work while improving passenger communication.
+
+---
+
+# 🏗️ System Architecture
+
+```
+Passengers
+      │
+      ▼
+PRASA Smart Connect
+      │
+      ├──────────────► AI Chatbot
+      │
+      ├──────────────► Ticket System
+      │
+      ├──────────────► Security Portal
+      │
+      ├──────────────► Crowding Predictor
+      │
+      ├──────────────► Route Search
+      │
+      ├──────────────► Live Tracking
+      │
+      ├──────────────► Lost & Found
+      │
+      ▼
+Automation Engine
+      │
+      ▼
+Supabase Database
+      │
+      ▼
+EmailJS + SMSPortal
 ```
 
-Deploy to Netlify and configure:
+---
 
-* Environment Variables
-* Redirect Rules
-* Serverless Functions
+# 💻 Technology Stack
+
+### Frontend
+
+- React
+- TypeScript
+- Tailwind CSS
+- TanStack Router
+- ShadCN UI
+- Lucide Icons
+
+### Backend
+
+- Express.js
+- Node.js
+- TypeScript
+
+### Database
+
+- Supabase
+- PostgreSQL
+- Realtime Database
+
+### APIs & Services
+
+- OpenAI
+- SMSPortal
+- EmailJS
+- Supabase Edge Functions
+
+### Automation
+
+- Node Cron
+- Database Triggers
+- Database Webhooks
+- Edge Functions
+- Realtime Events
 
 ---
 
-# Future Enhancements
+# 🔒 Security
 
-* Real GPS train tracking
-* WhatsApp notifications
-* Mobile application
-* Predictive delay analysis
-* Facial recognition for station security
-* Smart crowd management
-* Offline ticket validation
-* AI-powered route recommendations
-* Passenger reward system
-* Multi-language support
+The platform includes:
 
----
-
-# Contributors
-
-### Development Team
-
-* Ntando Badla – Full Stack Development, Database Design, Automation & System Architecture
-* Semoshwe – Sentiment Analysis & Crowding Prediction
-* Anita – AI Chatbot Development
+- Role-based authentication
+- Admin portal
+- Super Admin portal
+- Security officer portal
+- QR code ticket validation
+- Audit logs
+- Secure database policies
+- Real-time monitoring
 
 ---
 
-# License
+# 📊 Business Benefits
 
-This project was developed for educational, innovation, and railway digital transformation purposes.
+## Passengers
 
-© 2026 PRASA Smart Connect. All Rights Reserved.
+- Faster access to train information
+- Real-time updates
+- Improved safety
+- Digital ticketing
+- Better travel planning
+
+## PRASA
+
+- Reduced operational workload
+- Improved communication
+- Automated reporting
+- Better passenger satisfaction
+- Digital transformation
+
+---
+
+# 🚀 Future Improvements
+
+- GPS-based train tracking
+- Mobile application
+- WhatsApp integration
+- Predictive delay analysis
+- Offline QR validation
+- Smart fare calculation
+- Passenger reward programme
+
+---
+
+# 👨‍💻 Developer
+
+**Ntando Badla**
+
+Software Developer
+
+### Technologies
+
+- React
+- TypeScript
+- Java
+- Laravel
+- MySQL
+- PostgreSQL
+- Supabase
+- Tailwind CSS
+- Express.js
+
+---
+
+# 📄 License
+
+This project was developed for educational and portfolio purposes to demonstrate modern software engineering practices and digital innovation within South African public transportation.
+
+---
+
+<div align="center">
+
+### ⭐ If you like this project, consider giving it a Star!
+
+**PRASA Smart Connect — Making Railway Travel Smarter, Safer, and More Connected.**
+
+</div>
