@@ -317,11 +317,11 @@ The platform includes:
 
 ---
 
-# 👨‍💻 Developer
+# 👨‍💻 Developers
 
-**Ntando Badla**
+**Ntando Badla** **Semoshwe Mapokgole** and **Sibahle Lottering**
 
-Software Developer
+Software Developers
 
 ### Technologies
 
